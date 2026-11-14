@@ -26,14 +26,16 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!(await requireMemberOrAdmin())) {
+  const session = await requireMemberOrAdmin();
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const { id } = await params;
   try {
     const body = await request.json() as { text?: unknown; sender?: unknown };
     const text = typeof body.text === 'string' ? body.text.trim() : '';
-    const sender = typeof body.sender === 'string' ? body.sender.trim() || 'Member' : 'Member';
+    // The sender label comes from the session role, never from the client.
+    const sender = session.role === 'admin' ? 'Organizer' : 'Member';
     if (!text) return NextResponse.json({ error: 'text is required' }, { status: 400 });
     if (text.length > 4000) {
       return NextResponse.json({ error: 'Reply is too long (4000 characters max)' }, { status: 400 });
