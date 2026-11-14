@@ -9,6 +9,7 @@ type Thread = {
   title: string;
   text: string;
   imageUrl?: string | null;
+  storagePath?: string | null;
   pinned?: boolean;
   replyCount?: number;
   createdAt?: unknown;
@@ -118,6 +119,7 @@ export default function BulletinPage() {
     setPostStatus('Posting…');
 
     let imageUrl: string | null = null;
+    let storagePath: string | null = null;
 
     if (imageFile) {
       const formData = new FormData();
@@ -133,8 +135,9 @@ export default function BulletinPage() {
           setPosting(false);
           return;
         }
-        const data = await upload.json() as { url?: string };
+        const data = await upload.json() as { url?: string; path?: string };
         imageUrl = data.url ?? null;
+        storagePath = data.path ?? null;
       } catch {
         setPostError(true);
         setPostStatus('The image could not be uploaded. Try posting without it.');
@@ -149,7 +152,7 @@ export default function BulletinPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ title: cleanTitle, text: cleanText, imageUrl }),
+        body: JSON.stringify({ title: cleanTitle, text: cleanText, imageUrl, storagePath }),
       });
 
       if (!response.ok) {
