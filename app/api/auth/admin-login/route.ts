@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { signToken } from '../../../../lib/auth';
 import { isAdminLoginConfigured, verifyAdminPassword } from '../../../../lib/passwords';
 import { clearLoginAttempts, consumeLoginAttempt } from '../../../../lib/login-rate-limit';
+import { adminPasswordVersion } from '../../../../lib/session-version';
 
 const ADMIN_TOKEN_MAX_AGE = 60 * 60 * 8; // 8 hours
 
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const token = signToken({ sub: 'admin' }, ADMIN_TOKEN_MAX_AGE);
+  const token = signToken({ sub: 'admin', pv: adminPasswordVersion() }, ADMIN_TOKEN_MAX_AGE);
   const response = NextResponse.json({ ok: true });
 
   response.cookies.set({
