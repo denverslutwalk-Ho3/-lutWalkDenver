@@ -16,17 +16,17 @@ export async function DELETE(
     const db = getAdminDb();
     const productRef = db.collection('products').doc(id);
     const product = await productRef.get();
-    await productRef.delete();
+    const storagePath = getProductStoragePath(product.data());
     try {
-      const storagePath = getProductStoragePath(product.data());
       if (isProductStoragePath(storagePath)) await deleteStorageObject(storagePath);
     } catch (err) {
       console.error('DELETE /api/products/[id] image cleanup error:', err);
       return NextResponse.json(
-        { error: 'Product was deleted, but its image could not be cleaned up' },
+        { error: 'Product image could not be cleaned up; product was not deleted' },
         { status: 500 },
       );
     }
+    await productRef.delete();
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('DELETE /api/products/[id] error:', err);
@@ -55,13 +55,21 @@ export async function PATCH(
         updates[key] = body[key];
       }
     }
-    const newStoragePath = typeof body.storagePath === 'string' ? body.storagePath.trim() : undefined;
-    if (newStoragePath !== undefined) {
-      if (newStoragePath && !isProductStoragePath(newStoragePath)) {
+    const requestedStoragePath = typeof body.storagePath === 'string' ? body.storagePath.trim() : undefined;
+    const requestedImageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : undefined;
+    if (requestedStoragePath !== undefined) {
+      if (
+        !isProductStoragePath(requestedStoragePath)
+        || requestedImageUrl !== `/api/storage?path=${encodeURIComponent(requestedStoragePath)}`
+      ) {
         return NextResponse.json({ error: 'Invalid product image path' }, { status: 400 });
       }
-      updates.storagePath = newStoragePath;
     }
+    const newStoragePath = requestedStoragePath
+      ?? (requestedImageUrl !== undefined
+        ? getProductStoragePath({ imageUrl: requestedImageUrl }) ?? ''
+        : undefined);
+    if (newStoragePath !== undefined) updates.storagePath = newStoragePath;
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
     }
@@ -69,21 +77,29 @@ export async function PATCH(
     const productRef = db.collection('products').doc(id);
     const product = await productRef.get();
     const oldStoragePath = getProductStoragePath(product.data());
-    await productRef.update(updates);
-    if (
-      newStoragePath !== undefined
-      && newStoragePath !== oldStoragePath
-      && isProductStoragePath(oldStoragePath)
-    ) {
+    const imageChanged = newStoragePath !== undefined && newStoragePath !== oldStoragePath;
+    if (imageChanged && isProductStoragePath(oldStoragePath)) {
       try {
         await deleteStorageObject(oldStoragePath);
       } catch (err) {
         console.error('PATCH /api/products/[id] image cleanup error:', err);
         return NextResponse.json(
-          { error: 'Product was updated, but its previous image could not be cleaned up' },
+          { error: 'Previous product image could not be cleaned up; product was not updated' },
           { status: 500 },
         );
       }
+    }
+    try {
+      await productRef.update(updates);
+    } catch (err) {
+      if (imageChanged && isProductStoragePath(oldStoragePath)) {
+        console.error('PATCH /api/products/[id] metadata update error after image cleanup:', err);
+        return NextResponse.json(
+          { error: 'Previous product image was removed, but product metadata could not be updated' },
+          { status: 500 },
+        );
+      }
+      throw err;
     }
     return NextResponse.json({ ok: true });
   } catch (err) {

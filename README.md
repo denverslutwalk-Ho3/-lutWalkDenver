@@ -102,3 +102,5 @@ The code-review items previously listed here have been implemented. Production a
 Post images are uploaded as part of post creation and stored under a server-generated, post-specific path. Legacy images in the former shared `posts/` folder are retained on post deletion to avoid deleting an unrelated upload; clean those up separately if needed.
 
 Legacy RSVP arrays are normalized the next time an event receives an RSVP. Product image cleanup applies to stored product paths and legacy `/api/storage` URLs; unrelated external image URLs are not deleted.
+
+Product image cleanup runs before product metadata changes because Firebase Storage and Firestore do not share a transaction. If Storage cleanup fails, the metadata change is not made; if the subsequent Firestore write fails, the API reports that the old image was already removed and metadata may need manual repair.

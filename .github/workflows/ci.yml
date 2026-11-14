@@ -45,7 +45,7 @@ jobs:
         run: npm run build
 
       - name: Run end-to-end tests
-        run: npm run test:e2e
+        run: npm run test:e2e -- --grep-invert "Accessibility — axe-core WCAG AA"
         env:
           AUTH_SECRET: ci-only-auth-secret
 

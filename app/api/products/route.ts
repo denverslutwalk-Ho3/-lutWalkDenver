@@ -48,7 +48,13 @@ export async function POST(request: Request) {
     if (!name || price < 0) {
       return NextResponse.json({ error: 'name and a non-negative price are required' }, { status: 400 });
     }
-    if (storagePath && !isProductStoragePath(storagePath)) {
+    if (
+      storagePath
+      && (
+        !isProductStoragePath(storagePath)
+        || imageUrl !== `/api/storage?path=${encodeURIComponent(storagePath)}`
+      )
+    ) {
       return NextResponse.json({ error: 'Invalid product image path' }, { status: 400 });
     }
 

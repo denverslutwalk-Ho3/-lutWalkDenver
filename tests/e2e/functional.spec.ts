@@ -221,7 +221,8 @@ test.describe('Session role and revocation checks', () => {
     }]);
     await page.goto('/calendar');
 
-    const trigger = page.getByRole('button', { name: 'Community workshop' });
+    const trigger = page.getByRole('heading', { name: 'Community workshop' })
+      .getByRole('button', { name: 'Community workshop' });
     await trigger.click();
     const dialog = page.getByRole('dialog', { name: 'Community workshop' });
     const closeButton = dialog.getByRole('button', { name: 'Close event details' });
