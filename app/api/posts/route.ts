@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       .get();
 
     const posts = snap.docs.map((doc: QueryDocumentSnapshot) => {
-      const post = { id: doc.id, ...doc.data() };
+      const post: Record<string, unknown> & { id: string } = { id: doc.id, ...doc.data() };
       delete post.storageOwnerHash;
       return post;
     });

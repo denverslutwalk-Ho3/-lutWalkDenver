@@ -30,6 +30,7 @@ type Product = {
   description: string;
   price: number;
   imageUrl: string;
+  storagePath?: string;
   category: string;
   stock: number;
 };
@@ -207,14 +208,14 @@ export default function AdminDashboardPage() {
 
   // ── Products ─────────────────────────────────────────────────────────────
 
-  const uploadProductImage = async (file: File): Promise<string> => {
+  const uploadProductImage = async (file: File): Promise<{ url: string; path: string } | null> => {
     const form = new FormData();
     form.append('file', file);
     form.append('folder', 'products');
     const res = await fetch('/api/upload', { method: 'POST', credentials: 'include', body: form });
-    if (!res.ok) return '';
-    const json = await res.json() as { url?: string };
-    return json.url ?? '';
+    if (!res.ok) return null;
+    const json = await res.json() as { url?: string; path?: string };
+    return json.url && json.path ? { url: json.url, path: json.path } : null;
   };
 
   const resetProductForm = () => {
@@ -236,10 +237,10 @@ export default function AdminDashboardPage() {
   const saveProduct = async (e: FormEvent) => {
     e.preventDefault();
     setProdStatus('Saving…');
-    let imageUrl = '';
+    let uploadedImage: { url: string; path: string } | null = null;
     if (prodImageFile) {
-      imageUrl = await uploadProductImage(prodImageFile);
-      if (!imageUrl) {
+      uploadedImage = await uploadProductImage(prodImageFile);
+      if (!uploadedImage) {
         setProdStatus('The image could not be uploaded. Try again or save without it.');
         return;
       }
@@ -252,7 +253,10 @@ export default function AdminDashboardPage() {
       category: prodCategory,
       stock: parseInt(prodStock, 10) || 0,
     };
-    if (imageUrl) payload.imageUrl = imageUrl;
+    if (uploadedImage) {
+      payload.imageUrl = uploadedImage.url;
+      payload.storagePath = uploadedImage.path;
+    }
 
     const res = await fetch(
       editingProductId ? `/api/products/${editingProductId}` : '/api/products',
@@ -269,14 +273,21 @@ export default function AdminDashboardPage() {
       resetProductForm();
       void loadData();
     } else {
-      setProdStatus(editingProductId ? 'Error updating product' : 'Error creating product');
+      const result = await res.json() as { error?: unknown };
+      setProdStatus(
+        typeof result.error === 'string'
+          ? result.error
+          : editingProductId ? 'Error updating product' : 'Error creating product',
+      );
     }
   };
 
   const deleteProduct = async (id: string) => {
     const response = await fetch(`/api/products/${id}`, { method: 'DELETE', credentials: 'include' });
     if (!response.ok) {
-      void loadData();
+      const result = await response.json() as { error?: unknown };
+      await loadData();
+      setProdStatus(typeof result.error === 'string' ? result.error : 'Error deleting product');
       return;
     }
     setProducts((prev) => prev.filter((p) => p.id !== id));
@@ -314,6 +325,7 @@ export default function AdminDashboardPage() {
           category: archiveCategory,
           imageUrl: url,
           storagePath: json.path ?? '',
+          contentType: archiveFile.type,
         }),
       });
 

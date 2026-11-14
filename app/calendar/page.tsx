@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { toIcs } from '../../lib/calendar-ics';
+import { toGoogleCalendarUrl, toIcs } from '../../lib/calendar-ics';
+import { getDateInTimeZone } from '../../lib/site-date';
+import { useDialogFocus } from '../../lib/use-dialog-focus';
 
 type CalendarEvent = {
   id: string;
@@ -10,7 +12,6 @@ type CalendarEvent = {
   time: string;
   location: string;
   description: string;
-  rsvps?: unknown[];
 };
 
 const MONTHS = [
@@ -37,21 +38,17 @@ function downloadIcs(event: CalendarEvent) {
   URL.revokeObjectURL(url);
 }
 
-function googleCalendarUrl(event: CalendarEvent): string {
-  const base = 'https://calendar.google.com/calendar/render?action=TEMPLATE';
-  const date = event.date.replace(/-/g, '');
-  return `${base}&text=${encodeURIComponent(event.title)}&dates=${date}/${date}&details=${encodeURIComponent(event.description)}&location=${encodeURIComponent(event.location)}`;
-}
-
 export default function CalendarPage() {
-  const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth());
+  const today = getDateInTimeZone(new Date());
+  const [todayYear, todayMonth, todayDay] = today.split('-').map(Number);
+  const [year, setYear] = useState(todayYear);
+  const [month, setMonth] = useState(todayMonth - 1);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [rsvpState, setRsvpState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
+  const eventDialogRef = useDialogFocus(selectedEvent !== null, () => setSelectedEvent(null));
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
@@ -97,7 +94,7 @@ export default function CalendarPage() {
   }
 
   const upcoming = events
-    .filter((event) => event.date >= today.toISOString().slice(0, 10))
+    .filter((event) => event.date >= today)
     .slice(0, 6);
 
   const openEvent = (event: CalendarEvent) => {
@@ -156,7 +153,7 @@ export default function CalendarPage() {
               ))}
               {cells.map((day, index) => {
                 if (day === null) return <div key={`empty-${index}`} className="cal-cell cal-cell--empty" aria-hidden="true" />;
-                const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                const isToday = day === todayDay && month === todayMonth - 1 && year === todayYear;
                 const dayEvents = eventsByDay[day] ?? [];
                 return (
                   <div
@@ -205,6 +202,8 @@ export default function CalendarPage() {
       {selectedEvent && (
         <div
           className="modal-backdrop"
+          ref={eventDialogRef}
+          tabIndex={-1}
           role="dialog"
           aria-modal="true"
           aria-label={selectedEvent.title}
@@ -224,6 +223,7 @@ export default function CalendarPage() {
             {selectedEvent.time && <p><strong>Time:</strong> {selectedEvent.time}</p>}
             {selectedEvent.location && <p><strong>Location:</strong> {selectedEvent.location}</p>}
             {selectedEvent.description && <p>{selectedEvent.description}</p>}
+            <p className="helper">Calendar exports use all-day dates in America/Denver.</p>
 
             <div className="btn-row btn-row--start">
               <button
@@ -240,7 +240,7 @@ export default function CalendarPage() {
               </button>
               <a
                 className="btn btn-secondary"
-                href={googleCalendarUrl(selectedEvent)}
+                href={toGoogleCalendarUrl(selectedEvent)}
                 target="_blank"
                 rel="noopener noreferrer"
               >

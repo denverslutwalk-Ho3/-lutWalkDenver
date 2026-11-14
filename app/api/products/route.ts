@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getAdminDb } from '../../../lib/firebase-admin';
 import { requireAdmin, requireMemberOrAdmin } from '../../../lib/authz';
 import { FieldValue, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { deleteStorageObject } from '../../../lib/storage-cleanup';
+import { isProductStoragePath } from '../../../lib/product-storage';
 
 export async function GET() {
   if (!(await requireMemberOrAdmin())) {
@@ -30,6 +32,7 @@ export async function POST(request: Request) {
       description?: unknown;
       price?: unknown;
       imageUrl?: unknown;
+      storagePath?: unknown;
       category?: unknown;
       stock?: unknown;
     };
@@ -38,23 +41,40 @@ export async function POST(request: Request) {
     const description = typeof body.description === 'string' ? body.description.trim() : '';
     const price = typeof body.price === 'number' ? body.price : 0;
     const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : '';
+    const storagePath = typeof body.storagePath === 'string' ? body.storagePath.trim() : '';
     const category = typeof body.category === 'string' ? body.category.trim() : 'other';
     const stock = typeof body.stock === 'number' ? body.stock : 0;
 
     if (!name || price < 0) {
       return NextResponse.json({ error: 'name and a non-negative price are required' }, { status: 400 });
     }
+    if (storagePath && !isProductStoragePath(storagePath)) {
+      return NextResponse.json({ error: 'Invalid product image path' }, { status: 400 });
+    }
 
     const db = getAdminDb();
-    const ref = await db.collection('products').add({
-      name,
-      description,
-      price,
-      imageUrl,
-      category,
-      stock,
-      createdAt: FieldValue.serverTimestamp(),
-    });
+    const ref = db.collection('products').doc();
+    try {
+      await ref.set({
+        name,
+        description,
+        price,
+        imageUrl,
+        storagePath,
+        category,
+        stock,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    } catch (err) {
+      if (storagePath) {
+        try {
+          await deleteStorageObject(storagePath);
+        } catch (cleanupError) {
+          console.error('POST /api/products upload cleanup error:', cleanupError);
+        }
+      }
+      throw err;
+    }
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {
