@@ -45,14 +45,17 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!(await requireMemberOrAdmin())) {
+  const session = await requireMemberOrAdmin();
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
     const body = await request.json() as { text?: unknown; sender?: unknown; encrypted?: unknown };
     const text = typeof body.text === 'string' ? body.text.trim() : '';
-    const sender = typeof body.sender === 'string' ? body.sender.trim() || 'Member' : 'Member';
+    // The sender label comes from the session role, never from the client,
+    // so members cannot post as an organizer or another label.
+    const sender = session.role === 'admin' ? 'Organizer' : 'Member';
     const encrypted = body.encrypted === true;
 
     if (!text) {
