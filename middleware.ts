@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifyTokenEdge } from './lib/auth-edge';
+import { passwordVersionEdge } from './lib/session-version-edge';
 
 // Paths that require either a member or admin token
 const AUTH_REQUIRED_PATHS = [
+  '/ai-chat',
   '/archive',
   '/bulletin',
   '/calendar',
@@ -21,7 +23,9 @@ const ADMIN_PATHS = ['/admin'];
 async function tokenHasRole(token: string | undefined, role: 'member' | 'admin') {
   if (!token) return false;
   const claims = await verifyTokenEdge(token);
-  return claims?.sub === role;
+  if (claims?.sub !== role) return false;
+  // Reject sessions issued under a previous password.
+  return claims.pv === (await passwordVersionEdge(role));
 }
 
 function redirectTo(request: NextRequest, pathname: string, next?: string) {
@@ -63,6 +67,7 @@ export const config = {
   runtime: 'nodejs',
   matcher: [
     '/admin/:path*',
+    '/ai-chat/:path*',
     '/archive/:path*',
     '/bulletin/:path*',
     '/calendar/:path*',
