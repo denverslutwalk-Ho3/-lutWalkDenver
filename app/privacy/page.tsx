@@ -25,6 +25,12 @@ export default function PrivacyPage() {
             see them.
           </li>
           <li>
+            <strong>AI assistant messages.</strong> If you use the member AI assistant
+            (/ai-chat), what you write is sent in plaintext to Mistral over HTTPS to
+            generate a reply. Those conversations are not saved in our Firebase project,
+            but they are processed by Mistral under its own terms.
+          </li>
+          <li>
             <strong>Nothing else.</strong> There is no analytics, advertising, or
             third-party tracking script on this site.
           </li>
@@ -37,6 +43,11 @@ export default function PrivacyPage() {
           uploads may still have public storage permissions until organizers review
           and update them, so treat links to older files as shareable.
         </p>
+        <p>
+          Member chat messages are encrypted in your browser with a shared room key, but
+          that key is derived on the server and available to every signed-in member, so
+          the chat is community-shared rather than private from the site or other members.
+        </p>
 
         <h2>What we do not collect</h2>
         <p>
@@ -48,7 +59,10 @@ export default function PrivacyPage() {
         <h2>Removing your content</h2>
         <p>
           Ask an organizer to remove a post or image, or email{' '}
-          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>. Deleting a post or
+          gallery item also deletes its uploaded image file from storage. The member
+          chat has no per-message deletion; rotating the sign-in password blocks new
+          sign-ins under the old one, and organizers can remove content on request.
         </p>
       </section>
     </main>
