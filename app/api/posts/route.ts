@@ -34,11 +34,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json() as { title?: unknown; text?: unknown };
+    const body = await request.json() as { title?: unknown; text?: unknown; storagePath?: unknown };
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     const text = typeof body.text === 'string' ? body.text.trim() : '';
     const imageUrl = typeof (body as { imageUrl?: unknown }).imageUrl === 'string'
       ? (body as { imageUrl: string }).imageUrl
+      : null;
+    const storagePath = typeof body.storagePath === 'string' && body.storagePath.trim()
+      ? body.storagePath.trim().slice(0, 512)
       : null;
 
     if (!title || !text) {
@@ -53,6 +56,7 @@ export async function POST(request: Request) {
       title,
       text,
       imageUrl,
+      storagePath,
       pinned: false,
       reactions: {},
       replyCount: 0,
