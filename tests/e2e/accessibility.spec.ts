@@ -3,8 +3,11 @@ import AxeBuilder from '@axe-core/playwright';
 
 const PUBLIC_PAGES = [
   { name: 'landing', url: '/' },
+  { name: 'about', url: '/about' },
+  { name: 'login', url: '/login' },
   { name: 'donate', url: '/donate' },
   { name: 'admin-login', url: '/admin-login' },
+  { name: 'privacy', url: '/privacy' },
 ];
 
 const PROTECTED_PAGES = [
@@ -18,7 +21,6 @@ const PROTECTED_PAGES = [
   { name: 'community', url: '/community' },
   { name: 'zines', url: '/zines' },
   { name: 'archive', url: '/archive' },
-  { name: 'events', url: '/events' },
 ];
 
 test.describe('Accessibility — axe-core WCAG AA', () => {
@@ -36,10 +38,11 @@ test.describe('Accessibility — axe-core WCAG AA', () => {
 
   for (const page of PROTECTED_PAGES) {
     test(`${page.name} — 0 axe violations (authenticated)`, async ({ page: browserPage, request }) => {
-      test.skip(!process.env.MEMBER_PASSWORD, 'MEMBER_PASSWORD not set');
+      const memberPassword = process.env.MEMBER_PASSWORD;
+      test.skip(!memberPassword, 'MEMBER_PASSWORD not set');
 
       const response = await request.post('/api/auth/login', {
-        data: { password: process.env.MEMBER_PASSWORD.trim() },
+        data: { password: memberPassword?.trim() },
       });
       test.skip(!response.ok(), 'Auth failed — skipping authenticated a11y test');
 
@@ -50,8 +53,7 @@ test.describe('Accessibility — axe-core WCAG AA', () => {
           await browserPage.context().addCookies([{
             name: 'sw_auth',
             value: match[1],
-            domain: new URL(browserPage.url() || 'http://localhost').hostname,
-            path: '/',
+            url: process.env.BASE_URL || 'http://localhost:3000',
           }]);
         }
       }

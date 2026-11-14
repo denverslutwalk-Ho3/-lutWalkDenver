@@ -1,23 +1,38 @@
-const MEMBER_PASSWORD_ENV_KEYS = ['MEMBER_PASSWORD', 'SW_AUTH', 'sw_auth', 'SW__AUTH', 'sw__auth'];
-const ADMIN_PASSWORD_ENV_KEYS = ['ADMIN_PASSWORD', 'SW_ADMIN', 'sw_admin'];
-const DEFAULT_MEMBER_PASSWORD = 'member-password';
-const DEFAULT_ADMIN_PASSWORD = 'admin-password';
+import crypto from 'crypto';
 
-function readFirstConfiguredValue(keys: string[]) {
-  for (const key of keys) {
-    const value = process.env[key];
-    if (typeof value === 'string' && value.length > 0) {
-      return value;
-    }
-  }
+/**
+ * Member and admin access is a single shared password per role, configured in
+ * the deployment environment. There are deliberately no fallback passwords:
+ * an unset password locks the role instead of opening it with a known value.
+ */
 
-  return '';
+function readPassword(name: string) {
+  const value = process.env[name];
+  return typeof value === 'string' ? value.trim() : '';
 }
 
-export function getMemberPassword() {
-  return readFirstConfiguredValue(MEMBER_PASSWORD_ENV_KEYS) || DEFAULT_MEMBER_PASSWORD;
+function constantTimeEqual(a: string, b: string) {
+  const digestA = crypto.createHash('sha256').update(a).digest();
+  const digestB = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(digestA, digestB);
 }
 
-export function getAdminPassword() {
-  return readFirstConfiguredValue(ADMIN_PASSWORD_ENV_KEYS) || DEFAULT_ADMIN_PASSWORD;
+export function isMemberLoginConfigured() {
+  return readPassword('MEMBER_PASSWORD').length > 0;
+}
+
+export function isAdminLoginConfigured() {
+  return readPassword('ADMIN_PASSWORD').length > 0;
+}
+
+export function verifyMemberPassword(input: string) {
+  const expected = readPassword('MEMBER_PASSWORD');
+  if (!expected) return false;
+  return constantTimeEqual(input.trim(), expected);
+}
+
+export function verifyAdminPassword(input: string) {
+  const expected = readPassword('ADMIN_PASSWORD');
+  if (!expected) return false;
+  return constantTimeEqual(input.trim(), expected);
 }

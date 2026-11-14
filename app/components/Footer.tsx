@@ -1,5 +1,3 @@
-'use client';
-
 import Link from 'next/link';
 
 export default function Footer() {
@@ -9,7 +7,7 @@ export default function Footer() {
         <section aria-labelledby="contact-heading">
           <h3 id="contact-heading">Contact Us</h3>
           <p>
-            Email: <a href="mailto:hello@slutwalkdenver.gay">hello@slutwalkdenver.gay</a>
+            Email: <a href="mailto:denverslutwalk@proton.me">denverslutwalk@proton.me</a>
           </p>
         </section>
 
@@ -45,6 +43,9 @@ export default function Footer() {
             </li>
             <li>
               <Link href="/accessibility">Accessibility Statement</Link>
+            </li>
+            <li>
+              <Link href="/admin-login">Organizer sign in</Link>
             </li>
           </ul>
         </section>

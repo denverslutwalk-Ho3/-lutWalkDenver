@@ -3,11 +3,11 @@ import { test, expect } from '@playwright/test';
 const MEMBER_PASSWORD = process.env.MEMBER_PASSWORD || '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 
-const PUBLIC_PAGES = ['/', '/donate', '/admin-login'];
+const PUBLIC_PAGES = ['/', '/about', '/login', '/donate', '/admin-login', '/privacy', '/terms', '/accessibility'];
 
 const PROTECTED_ROUTES = [
   '/archive', '/bulletin', '/calendar', '/care', '/chat',
-  '/community', '/education', '/events', '/organizing', '/shop', '/zines',
+  '/community', '/education', '/organizing', '/shop', '/zines',
 ];
 
 test.describe('Public pages load', () => {
@@ -21,11 +21,23 @@ test.describe('Public pages load', () => {
 
 test.describe('Protected routes redirect unauthenticated users', () => {
   for (const path of PROTECTED_ROUTES) {
-    test(`${path} redirects`, async ({ page }) => {
+    test(`${path} redirects to sign in`, async ({ page }) => {
       await page.goto(path);
-      expect(page.url()).not.toMatch(new RegExp(`${path}$`));
+      await expect(page).toHaveURL(/\/login\?next=/);
     });
   }
+});
+
+test.describe('Legacy routes redirect', () => {
+  test('/events goes to the calendar (then sign in)', async ({ page }) => {
+    await page.goto('/events');
+    await expect(page).toHaveURL(/\/login\?next=%2Fcalendar/);
+  });
+
+  test('/index.html goes home', async ({ page }) => {
+    await page.goto('/index.html');
+    await expect(page).toHaveURL(/\/$/);
+  });
 });
 
 test.describe('Auth flow — member login', () => {
@@ -33,27 +45,19 @@ test.describe('Auth flow — member login', () => {
     test.skip(!MEMBER_PASSWORD, 'MEMBER_PASSWORD not set');
   });
 
-  test('member can login with correct password', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('input#password').fill(MEMBER_PASSWORD.trim());
-    await page.locator('button#loginBtn').click();
-    await page.waitForURL(url => url.toString() !== page.url() || true, { timeout: 10_000 }).catch(() => {});
-  });
-
-  test('member login trims whitespace from password', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('input#password').fill(`  ${MEMBER_PASSWORD}  `);
-    await page.locator('button#loginBtn').click();
-    await page.waitForURL(url => url.toString() !== page.url() || true, { timeout: 10_000 }).catch(() => {});
+  test('member can sign in and reach a protected page', async ({ page }) => {
+    await page.goto('/login');
+    await page.locator('input#access-password').fill(MEMBER_PASSWORD.trim());
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.waitForURL(/\/community$/, { timeout: 15_000 });
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
 
   test('member login fails with wrong password', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('input#password').fill('definitely-wrong-password-12345');
-    await page.locator('button#loginBtn').click();
-    await page.waitForTimeout(2000);
-    const errorMsg = page.locator('#errorMessage');
-    await expect(errorMsg).toContainText(/incorrect|try again/i);
+    await page.goto('/login');
+    await page.locator('input#access-password').fill('definitely-wrong-password-12345');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await expect(page.locator('.form-message--error')).toContainText(/incorrect|not work/i);
   });
 });
 
@@ -62,47 +66,66 @@ test.describe('Auth flow — admin login', () => {
     test.skip(!ADMIN_PASSWORD, 'ADMIN_PASSWORD not set');
   });
 
-  test('admin can login', async ({ page }) => {
+  test('admin can sign in and open the dashboard', async ({ page }) => {
     await page.goto('/admin-login');
-    const passwordInput = page.locator('input[type="password"]');
-    await passwordInput.fill(ADMIN_PASSWORD.trim());
-    await page.locator('button[type="submit"], button:has-text("Enter"), button:has-text("Login")').first().click();
-    await page.waitForURL(/admin/, { timeout: 10_000 }).catch(() => {});
+    await page.locator('input#access-password').fill(ADMIN_PASSWORD.trim());
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.waitForURL(/\/admin$/, { timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /Manage the community hub/i })).toBeVisible();
   });
 });
 
-test.describe('API endpoint tests', () => {
-  test('POST /api/auth/login accepts POST method', async ({ request }) => {
-    test.skip(!MEMBER_PASSWORD, 'MEMBER_PASSWORD not set');
-    const response = await request.post('/api/auth/login', {
-      data: { password: MEMBER_PASSWORD.trim() },
-    });
-    expect(response.status()).toBe(200);
+test.describe('API access control', () => {
+  test('unauthenticated API reads are rejected', async ({ request }) => {
+    for (const path of ['/api/posts', '/api/events', '/api/products', '/api/messages', '/api/gallery']) {
+      const response = await request.get(path);
+      expect(response.status(), path).toBe(401);
+    }
   });
 
-  test('POST /api/auth/login rejects wrong password', async ({ request }) => {
-    const response = await request.post('/api/auth/login', {
-      data: { password: 'wrong-password' },
-    });
+  test('unauthenticated writes are rejected', async ({ request }) => {
+    const response = await request.post('/api/posts', { data: { title: 'x', text: 'y' } });
     expect(response.status()).toBe(401);
   });
 
-  test('GET /api/auth/login returns 405', async ({ request }) => {
-    const response = await request.get('/api/auth/login');
-    expect(response.status()).toBe(405);
+  test('POST /api/auth/login rejects a wrong password', async ({ request }) => {
+    const response = await request.post('/api/auth/login', { data: { password: 'wrong-password' } });
+    expect([401, 503]).toContain(response.status());
   });
 });
 
-test.describe('No dead internal links on landing page', () => {
-  test('all internal links resolve', async ({ page }) => {
+test.describe('No dead internal links on public pages', () => {
+  for (const path of ['/', '/about', '/donate']) {
+    test(`links resolve on ${path}`, async ({ page }) => {
+      await page.goto(path);
+      const links = await page.locator('a[href^="/"]').evaluateAll((nodes) =>
+        Array.from(new Set(nodes.map((node) => node.getAttribute('href')))).filter(Boolean),
+      );
+      for (const href of links) {
+        const response = await page.request.get(href as string);
+        expect([200, 307, 308], `${path} -> ${href}`).toContain(response.status());
+      }
+    });
+  }
+});
+
+test.describe('Mobile navigation', () => {
+  test('menu button opens the primary navigation', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/');
-    const links = await page.locator('a[href^="/"]').all();
-    for (const link of links) {
-      const href = await link.getAttribute('href');
-      if (!href || href === '#') continue;
-      const response = await page.request.get(href);
-      expect([200, 307, 308]).toContain(response.status());
-    }
+    const menuButton = page.getByRole('button', { name: 'Menu' });
+    await expect(menuButton).toBeVisible();
+    await menuButton.click();
+    await expect(page.locator('#primary-navigation')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'About', exact: true })).toBeVisible();
+  });
+});
+
+test.describe('Contact details', () => {
+  test('footer shows the current contact email', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.footer')).toContainText('denverslutwalk@proton.me');
+    await expect(page.locator('.footer')).not.toContainText('hello@slutwalkdenver.gay');
   });
 });
 

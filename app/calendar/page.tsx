@@ -1,9 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useState, useCallback } from 'react';
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+import { useCallback, useEffect, useState } from 'react';
 
 type CalendarEvent = {
   id: string;
@@ -12,10 +9,8 @@ type CalendarEvent = {
   time: string;
   location: string;
   description: string;
-  rsvps?: string[];
+  rsvps?: unknown[];
 };
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -27,19 +22,18 @@ function buildCalendarGrid(year: number, month: number): (number | null)[] {
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells: (number | null)[] = Array.from({ length: firstDay }, () => null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  for (let day = 1; day <= daysInMonth; day++) cells.push(day);
   return cells;
 }
 
 function toIcs(event: CalendarEvent): string {
   const dateStr = event.date.replace(/-/g, '');
-  const uid = `${event.id}@slutwalkdenver`;
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
     'PRODID:-//SlutWalk Denver//EN',
     'BEGIN:VEVENT',
-    `UID:${uid}`,
+    `UID:${event.id}@slutwalkdenver`,
     `DTSTART;VALUE=DATE:${dateStr}`,
     `SUMMARY:${event.title}`,
     `DESCRIPTION:${event.description.replace(/\n/g, '\\n')}`,
@@ -52,10 +46,10 @@ function toIcs(event: CalendarEvent): string {
 function downloadIcs(event: CalendarEvent) {
   const blob = new Blob([toIcs(event)], { type: 'text/calendar' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${event.title.replace(/\s+/g, '-')}.ics`;
-  a.click();
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${event.title.replace(/\s+/g, '-')}.ics`;
+  anchor.click();
   URL.revokeObjectURL(url);
 }
 
@@ -65,185 +59,172 @@ function googleCalendarUrl(event: CalendarEvent): string {
   return `${base}&text=${encodeURIComponent(event.title)}&dates=${date}/${date}&details=${encodeURIComponent(event.description)}&location=${encodeURIComponent(event.location)}`;
 }
 
-// ── Seed events for prototype (shown when Firebase is not configured) ─────────
-
-const SEED_EVENTS: CalendarEvent[] = [
-  {
-    id: 'seed-1',
-    title: 'Volunteer Orientation',
-    date: new Date(new Date().getFullYear(), new Date().getMonth(), 14).toISOString().slice(0, 10),
-    time: '4:00 PM',
-    location: 'Denver Community Center',
-    description: 'Planning circle and resource sharing for new volunteers.',
-    rsvps: [],
-  },
-  {
-    id: 'seed-2',
-    title: 'Solidarity Rally',
-    date: new Date(new Date().getFullYear(), new Date().getMonth(), 21).toISOString().slice(0, 10),
-    time: '11:00 AM',
-    location: 'Civic Center Park, Denver',
-    description: 'Public gathering and outreach event.',
-    rsvps: [],
-  },
-];
-
-// ── Component ──────────────────────────────────────────────────────────────────
-
 export default function CalendarPage() {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
-  const [events, setEvents] = useState<CalendarEvent[]>(SEED_EVENTS);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const [rsvpDone, setRsvpDone] = useState(false);
+  const [rsvpState, setRsvpState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
 
   const fetchEvents = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
     try {
-      const res = await fetch('/api/events?limit=100', { credentials: 'include' });
-      if (!res.ok) return;
-      const json = await res.json() as { events?: CalendarEvent[] };
-      if (Array.isArray(json.events) && json.events.length > 0) {
-        setEvents(json.events);
+      const response = await fetch('/api/events?limit=100', { credentials: 'include' });
+      if (!response.ok) {
+        setLoadError('The calendar could not be loaded. Try again in a moment.');
+        return;
       }
+      const data = await response.json() as { events?: CalendarEvent[] };
+      setEvents(Array.isArray(data.events) ? data.events : []);
     } catch {
-      // Use seed events when API is unavailable
+      setLoadError('The calendar could not be loaded. Check your connection and try again.');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => { void fetchEvents(); }, [fetchEvents]);
 
   const prevMonth = () => {
-    if (month === 0) { setYear(y => y - 1); setMonth(11); }
-    else setMonth(m => m - 1);
+    if (month === 0) { setYear((value) => value - 1); setMonth(11); }
+    else setMonth((value) => value - 1);
   };
   const nextMonth = () => {
-    if (month === 11) { setYear(y => y + 1); setMonth(0); }
-    else setMonth(m => m + 1);
+    if (month === 11) { setYear((value) => value + 1); setMonth(0); }
+    else setMonth((value) => value + 1);
   };
 
   const cells = buildCalendarGrid(year, month);
 
-  const eventsThisMonth = events.filter((e) => {
-    const [ey, em] = e.date.split('-').map(Number);
-    return ey === year && em - 1 === month;
+  const eventsThisMonth = events.filter((event) => {
+    const [eventYear, eventMonth] = event.date.split('-').map(Number);
+    return eventYear === year && eventMonth - 1 === month;
   });
 
   const eventsByDay: Record<number, CalendarEvent[]> = {};
-  for (const e of eventsThisMonth) {
-    const day = Number(e.date.split('-')[2]);
+  for (const event of eventsThisMonth) {
+    const day = Number(event.date.split('-')[2]);
     if (!eventsByDay[day]) eventsByDay[day] = [];
-    eventsByDay[day].push(e);
+    eventsByDay[day].push(event);
   }
+
+  const upcoming = events
+    .filter((event) => event.date >= today.toISOString().slice(0, 10))
+    .slice(0, 6);
+
+  const openEvent = (event: CalendarEvent) => {
+    setSelectedEvent(event);
+    setRsvpState('idle');
+  };
 
   const handleRsvp = async () => {
     if (!selectedEvent) return;
+    setRsvpState('sending');
     try {
-      await fetch(`/api/events/${selectedEvent.id}/rsvp`, {
+      const response = await fetch(`/api/events/${selectedEvent.id}/rsvp`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        body: JSON.stringify({ status: 'attending' }),
       });
-      setRsvpDone(true);
+      setRsvpState(response.ok ? 'done' : 'error');
     } catch {
-      setRsvpDone(true); // Optimistic for prototype
+      setRsvpState('error');
     }
   };
 
   return (
     <main className="shell">
-      <header className="hero">
-        <nav>
-          <div className="logo">$lutWalk Denver</div>
-          <ul>
-            <li><Link href="/">Home</Link></li>
-            <li><Link href="/about">About</Link></li>
-            <li><Link href="/shop">Store</Link></li>
-            <li><Link href="/bulletin">Bulletin</Link></li>
-            <li><Link href="/admin-login">Admin</Link></li>
-          </ul>
-        </nav>
+      <section className="hero" aria-labelledby="calendar-title">
         <div className="hero-overlay">
           <p className="eyebrow">Community calendar</p>
-          <h1>Meetings, workshops, rallies, and volunteer shifts.</h1>
-          <p>Click any highlighted date to see event details and RSVP.</p>
-        </div>
-      </header>
-
-      <section className="featured">
-        {/* Month navigation */}
-        <div className="cal-nav" role="navigation" aria-label="Calendar navigation">
-          <button type="button" onClick={prevMonth} aria-label="Previous month">‹</button>
-          <h2>{MONTHS[month]} {year}</h2>
-          <button type="button" onClick={nextMonth} aria-label="Next month">›</button>
-        </div>
-
-        {/* Calendar grid */}
-        <div className="cal-grid" role="grid" aria-label={`${MONTHS[month]} ${year} calendar`}>
-          {DAYS.map((d) => (
-            <div key={d} className="cal-day-label" role="columnheader" aria-label={d}>{d}</div>
-          ))}
-          {cells.map((day, i) => {
-            if (day === null) return <div key={`empty-${i}`} className="cal-cell cal-cell--empty" aria-hidden="true" />;
-            const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
-            const dayEvents = eventsByDay[day] ?? [];
-            return (
-              <div
-                key={day}
-                className={`cal-cell ${isToday ? 'cal-cell--today' : ''} ${dayEvents.length > 0 ? 'cal-cell--has-event' : ''}`}
-                role="gridcell"
-                aria-label={`${MONTHS[month]} ${day}${dayEvents.length > 0 ? `, ${dayEvents.length} event${dayEvents.length > 1 ? 's' : ''}` : ''}`}
-              >
-                <span className="cal-date">{day}</span>
-                {dayEvents.map((e) => (
-                  <button
-                    key={e.id}
-                    type="button"
-                    className="cal-event-pill"
-                    onClick={() => { setSelectedEvent(e); setRsvpDone(false); }}
-                  >
-                    {e.title}
-                  </button>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Upcoming events list */}
-        <h2 style={{ marginTop: '2rem' }}>Upcoming events</h2>
-        <div className="events">
-          {events
-            .filter((e) => e.date >= today.toISOString().slice(0, 10))
-            .slice(0, 6)
-            .map((e) => (
-              <article key={e.id}>
-                <p className="eyebrow">{e.date}</p>
-                <h3>
-                  <button
-                    type="button"
-                    className="event-title-btn"
-                    onClick={() => { setSelectedEvent(e); setRsvpDone(false); }}
-                  >
-                    {e.title}
-                  </button>
-                </h3>
-                <p>{e.time}{e.location ? ` • ${e.location}` : ''}</p>
-              </article>
-            ))}
-          {events.filter((e) => e.date >= today.toISOString().slice(0, 10)).length === 0 && (
-            <p>No upcoming events. Check back soon.</p>
-          )}
+          <h1 id="calendar-title">Meetings, workshops, rallies, and volunteer shifts.</h1>
+          <p>Select a date to see details, RSVP, or add the event to your own calendar.</p>
         </div>
       </section>
 
-      {/* Event detail modal */}
+      <section className="featured">
+        {loading && <p>Loading events…</p>}
+        {loadError && (
+          <div className="notice notice--error" role="alert">
+            <p>{loadError}</p>
+            <button type="button" className="btn btn-secondary" onClick={() => void fetchEvents()}>
+              Try again
+            </button>
+          </div>
+        )}
+
+        {!loadError && (
+          <>
+            <div className="cal-nav" role="group" aria-label="Calendar month navigation">
+              <button type="button" onClick={prevMonth} aria-label="Previous month">‹</button>
+              <h2>{MONTHS[month]} {year}</h2>
+              <button type="button" onClick={nextMonth} aria-label="Next month">›</button>
+            </div>
+
+            <div className="cal-grid" aria-label={`${MONTHS[month]} ${year} calendar`}>
+              {DAYS.map((day) => (
+                <div key={day} className="cal-day-label">{day}</div>
+              ))}
+              {cells.map((day, index) => {
+                if (day === null) return <div key={`empty-${index}`} className="cal-cell cal-cell--empty" aria-hidden="true" />;
+                const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                const dayEvents = eventsByDay[day] ?? [];
+                return (
+                  <div
+                    key={day}
+                    className={`cal-cell ${isToday ? 'cal-cell--today' : ''} ${dayEvents.length > 0 ? 'cal-cell--has-event' : ''}`}
+                    aria-label={`${MONTHS[month]} ${day}${dayEvents.length > 0 ? `, ${dayEvents.length} event${dayEvents.length > 1 ? 's' : ''}` : ''}`}
+                  >
+                    <span className="cal-date">{day}</span>
+                    {dayEvents.map((event) => (
+                      <button
+                        key={event.id}
+                        type="button"
+                        className="cal-event-pill"
+                        onClick={() => openEvent(event)}
+                      >
+                        {event.title}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+
+            <h2 className="calendar-subheading">Upcoming events</h2>
+            {upcoming.length === 0 ? (
+              <p>No upcoming events are posted yet. Organizers can add events from the admin dashboard.</p>
+            ) : (
+              <div className="events">
+                {upcoming.map((event) => (
+                  <article key={event.id}>
+                    <p className="eyebrow">{event.date}</p>
+                    <h3>
+                      <button type="button" className="event-title-btn" onClick={() => openEvent(event)}>
+                        {event.title}
+                      </button>
+                    </h3>
+                    <p>{event.time}{event.location ? ` • ${event.location}` : ''}</p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
       {selectedEvent && (
         <div
           className="modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-label={selectedEvent.title}
-          onClick={(e) => { if (e.target === e.currentTarget) setSelectedEvent(null); }}
+          onClick={(event) => { if (event.target === event.currentTarget) setSelectedEvent(null); }}
         >
           <div className="modal-card">
             <button
@@ -260,19 +241,17 @@ export default function CalendarPage() {
             {selectedEvent.location && <p><strong>Location:</strong> {selectedEvent.location}</p>}
             {selectedEvent.description && <p>{selectedEvent.description}</p>}
 
-            <div className="btn-row" style={{ justifyContent: 'flex-start', marginTop: '1rem' }}>
-              {rsvpDone ? (
-                <span className="rsvp-confirm">You&apos;re attending.</span>
-              ) : (
-                <button type="button" className="btn" onClick={() => void handleRsvp()}>
-                  RSVP
-                </button>
-              )}
+            <div className="btn-row btn-row--start">
               <button
                 type="button"
-                className="btn btn-secondary"
-                onClick={() => downloadIcs(selectedEvent)}
+                className="btn"
+                onClick={() => void handleRsvp()}
+                disabled={rsvpState === 'sending' || rsvpState === 'done'}
+                aria-busy={rsvpState === 'sending'}
               >
+                {rsvpState === 'sending' ? 'Saving…' : rsvpState === 'done' ? "You're attending" : 'RSVP'}
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => downloadIcs(selectedEvent)}>
                 Add to Calendar (.ics)
               </button>
               <a
@@ -284,6 +263,11 @@ export default function CalendarPage() {
                 Google Calendar
               </a>
             </div>
+            {rsvpState === 'error' && (
+              <p className="notice notice--error" role="alert">
+                Your RSVP could not be saved. Try again in a moment.
+              </p>
+            )}
           </div>
         </div>
       )}

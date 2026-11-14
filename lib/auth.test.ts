@@ -49,13 +49,23 @@ describe('auth token helpers', () => {
     expect(verifyToken(token)).toBeNull();
   });
 
-  it('uses a fallback secret when AUTH_SECRET is not configured', () => {
-    delete process.env.AUTH_SECRET;
+  it('refuses to sign and rejects tokens when AUTH_SECRET is missing', () => {
+    const env = { ...originalEnv };
+    delete env.AUTH_SECRET;
+    process.env = env;
 
-    const token = signToken({ sub: 'member' });
+    expect(() => signToken({ sub: 'member' })).toThrow('AUTH_SECRET is not configured');
+    expect(verifyToken('header.body.signature')).toBeNull();
+  });
 
-    expect(token).toContain('.');
-    expect(verifyToken(token)).toMatchObject({ sub: 'member' });
+  it('honours a custom token lifetime', () => {
+    process.env.AUTH_SECRET = 'super-secret';
+
+    const token = signToken({ sub: 'admin' }, 8 * 60 * 60);
+    const payload = verifyToken(token);
+
+    expect(payload).toMatchObject({ sub: 'admin' });
+    expect(Number(payload?.exp) - Number(payload?.iat)).toBe(8 * 60 * 60);
   });
 
   it('includes issued at and expiration claims in verified payloads', () => {

@@ -7,19 +7,18 @@ function base64url(input: string | Buffer) {
 }
 
 function getAuthSecret() {
-  return process.env.AUTH_SECRET || 'local-dev-secret';
-}
-
-export function signToken(payload: Record<string, unknown>) {
-  const authSecret = getAuthSecret();
-
-  if (!authSecret) {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) {
     throw new Error('AUTH_SECRET is not configured');
   }
+  return secret;
+}
 
+export function signToken(payload: Record<string, unknown>, ttlSeconds = TOKEN_TTL_SECONDS) {
+  const authSecret = getAuthSecret();
   const header = { alg: 'HS256', typ: 'JWT' };
   const iat = Math.floor(Date.now() / 1000);
-  const exp = iat + TOKEN_TTL_SECONDS;
+  const exp = iat + ttlSeconds;
   const body = { ...payload, iat, exp };
   const encoded = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(body))}`;
   const signature = crypto.createHmac('sha256', authSecret).update(encoded).digest('base64url');
@@ -28,7 +27,7 @@ export function signToken(payload: Record<string, unknown>) {
 }
 
 export function verifyToken(token: string) {
-  const authSecret = getAuthSecret();
+  const authSecret = process.env.AUTH_SECRET;
 
   if (!token || !authSecret) {
     return null;
@@ -48,8 +47,8 @@ export function verifyToken(token: string) {
     const sigBuf = Buffer.from(signature, 'base64url');
     const expBuf = Buffer.from(expectedSignature, 'base64url');
 
-    // Compare decoded byte buffers. timingSafeEqual throws a RangeError for
-    // mismatched buffer lengths, which the surrounding try/catch converts to null.
+    // timingSafeEqual throws a RangeError for mismatched buffer lengths, which
+    // the surrounding try/catch converts to null.
     if (!crypto.timingSafeEqual(sigBuf, expBuf)) {
       return null;
     }

@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import { vi } from 'vitest';
 
 process.env.AUTH_SECRET = 'test-secret-for-vitest-only';
 process.env.MEMBER_PASSWORD = 'test-member-pass';
