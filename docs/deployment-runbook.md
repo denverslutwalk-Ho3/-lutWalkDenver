@@ -45,6 +45,8 @@ AWS references:
 
 The authentication values are read server-side from environment variables. Do not put passwords, `AUTH_SECRET`, Firebase service-account identifiers, or Firebase private keys in `NEXT_PUBLIC_*` variables, client components, source files, workflow secrets, or logs.
 
+The login routes use one shared password per role. Each route now applies a Firestore-transaction-backed limit of 10 attempts per client address and role in a 15-minute window, returning `429` with `Retry-After` when exceeded. The address is HMACed with `AUTH_SECRET` before persistence; raw addresses are not stored. This limiter depends on Firestore availability and the hosting proxy supplying a trustworthy `X-Forwarded-For` or `X-Real-IP` value. Configure Firestore TTL for `internal_login_rate_limits.expiresAt`, and retain a suitable edge/WAF rate limit as defense in depth against distributed attempts. Test limits without creating a shared-account lockout that could deny access to members.
+
 ## Environment variables and secret handling
 
 The current code references:
@@ -73,7 +75,11 @@ If passwords were pasted into chat or other shared systems, treat them as expose
 
 The repository contains no `firebase.json`, Firestore rules, or Storage rules to review or deploy. Firebase Admin uses service-account IAM and bypasses client Security Rules; do not broaden service-account permissions or weaken rules to make deployment work. Confirm the production project, enabled Firestore/Storage services, and least-privilege service-account access with the Firebase owner.
 
-**Privacy risk to review:** `/api/upload` calls `makePublic()` for uploaded files. The route requires a signed-in session and applies additional role checks for certain folders, but uploaded objects are then publicly readable by URL. The app documentation already describes uploads as public. Confirm this is acceptable for every upload, especially archive/community material, before production; this runbook does not change that existing behavior.
+Uploads no longer make objects public. `/api/upload` returns a same-origin `/api/storage` URL; the read route requires a signed-in session and serves files with private no-store caching. Upload authorization remains admin-only for archive, community, and product folders; signed-in members can read these assets as needed by the member pages. New uploads remain private only if the Firebase Storage bucket IAM policy does not grant public reads.
+
+**Existing-object migration remains a production blocker:** previously uploaded files may still have public ACLs or public bucket access, and their direct URLs may already have been copied elsewhere. The Firebase owner must inspect the bucket policy and revoke public access for legacy objects as appropriate, then validate that private uploads and authorized reads work. Do not remove or rewrite production objects without an approved migration and backup.
+
+The login rate limiter uses Firestore and requires the Firebase service account to read/write the `internal_login_rate_limits` collection. Configure a Firestore TTL policy on its `expiresAt` field; application checks still enforce the 15-minute window if TTL cleanup is delayed. Rate-limit records contain an HMAC-derived identifier, attempt count, and timestamps, not raw client addresses or passwords.
 
 ## Connect GitHub to AWS Amplify (manual account action)
 
@@ -133,7 +139,7 @@ Post-deployment checks:
 - Member login grants member access but not `/admin`; admin login grants admin access and keeps the separate role claim.
 - Login response cookies are `HttpOnly`, `Secure`, `SameSite=Lax`, path `/`, with the intended expiration.
 - Protected API requests are unauthorized without a session; test authorized Firebase routes with non-production test data.
-- Firebase-backed reads/writes work against the intended production project, and Storage public-read behavior is explicitly approved.
+- Firebase-backed reads/writes and Firestore-backed login throttling work against the intended production project; private media access is verified and any legacy public object access is reviewed.
 - Canonical apex, `www` redirect, HTTPS/TLS, and DNS validation work from an external resolver.
 - No production secret appears in build logs, browser bundles, downloadable artifacts, or error output.
 
@@ -141,7 +147,9 @@ For rollback, use Amplify's deployment history to redeploy the last known-good p
 
 ## Dependency security
 
-The lockfile was refreshed with non-forced, semver-compatible audit updates; it now resolves Next.js 15.5.29 and Firebase Admin 14.5.1. The last `npm audit --omit=dev` reported one moderate Next.js and one high PostCSS advisory; the available fix would require a Next.js 16 major upgrade. The full audit also reported two critical development-tool advisories in Vitest/Tinypool; the suggested remediation is a Vitest 5 major upgrade. No major upgrade was forced. Re-run `npm audit` and schedule separately reviewed/tested framework and test-runner upgrades before treating the dependency tree as clear.
+The lockfile resolves Next.js 15.5.29 and Firebase Admin 14.5.1. To remediate audit findings without moving the application to a new Next.js major, `package.json` overrides Next.js's pinned PostCSS dependency to 8.5.33. Vitest was updated to 5.1.0 to address the critical Vitest/Tinypool advisories, and the affected TypeScript-ESLint dependency's minimatch was overridden to 11.0.8. These dependency updates were validated with `npm ci`, lint, unit tests, TypeScript, and a production build. The overrides cross the transitive dependencies' declared major/minor ranges and must be retested when updating Next.js or ESLint/Vitest.
+
+On 2026-11-14, both `npm audit` and `npm audit --omit=dev` reported zero vulnerabilities after these changes. Re-run both commands on future dependency updates; a clean audit is not a substitute for application security review.
 
 ## Local verification
 

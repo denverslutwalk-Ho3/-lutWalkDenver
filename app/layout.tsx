@@ -69,9 +69,9 @@ export default function RootLayout({
               addressCountry: 'US',
             },
             sameAs: [
-              'https://twitter.com/SlutWalkDenver',
-              'https://instagram.com/SlutWalkDenver',
-              'https://mastodon.social/@SlutWalkDenver',
+              'https://x.com/DenverSlutwalk',
+              'https://www.instagram.com/denverslutwalk/',
+              'https://mastodon.social/@DenverSlutWalk',
             ],
           })}
         </script>

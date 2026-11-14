@@ -70,7 +70,7 @@ public/              favicon, icon, manifest, robots, sitemap, published media
 
 ## Data
 
-Firestore collections: `posts` (with a `replies` subcollection), `messages`, `events`, `products`, `galleryAssets`. Images are uploaded to Firebase Storage through `/api/upload` and served from a public URL, so treat every upload as public.
+Firestore collections: `posts` (with a `replies` subcollection), `messages`, `events`, `products`, `galleryAssets`. Files uploaded to Firebase Storage through `/api/upload` are served through authenticated `/api/storage` URLs. Uploading archive, community, and product files is admin-only; signed-in members can read them. Existing objects may retain public access and must be reviewed with the Firebase owner; see the [deployment runbook](./docs/deployment-runbook.md).
 
 Chat messages are encrypted in the browser with a room key derived from `AUTH_SECRET` and delivered only to signed-in members.
 

@@ -43,13 +43,10 @@ export function verifyToken(token: string) {
     const unsigned = `${encodedHeader}.${encodedBody}`;
     const expectedSignature = crypto.createHmac('sha256', authSecret).update(unsigned).digest('base64url');
 
-    // Compare decoded buffers so timingSafeEqual operates on raw bytes
-    const sigBuf = Buffer.from(signature, 'base64url');
-    const expBuf = Buffer.from(expectedSignature, 'base64url');
+    const sigBuf = Buffer.from(signature, 'ascii');
+    const expBuf = Buffer.from(expectedSignature, 'ascii');
 
-    // timingSafeEqual throws a RangeError for mismatched buffer lengths, which
-    // the surrounding try/catch converts to null.
-    if (!crypto.timingSafeEqual(sigBuf, expBuf)) {
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
       return null;
     }
 

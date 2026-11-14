@@ -14,6 +14,15 @@ function base64urlDecode(b64url: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+function base64urlEncode(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 export async function verifyTokenEdge(token: string): Promise<Record<string, unknown> | null> {
   const secret = process.env.AUTH_SECRET;
 
@@ -28,6 +37,10 @@ export async function verifyTokenEdge(token: string): Promise<Record<string, unk
     }
 
     const [encodedHeader, encodedBody, signature] = parts;
+    const signatureBytes = base64urlDecode(signature);
+    if (base64urlEncode(signatureBytes) !== signature) {
+      return null;
+    }
 
     const unsigned = `${encodedHeader}.${encodedBody}`;
     const encoder = new TextEncoder();
@@ -44,7 +57,7 @@ export async function verifyTokenEdge(token: string): Promise<Record<string, unk
     const isValid = await crypto.subtle.verify(
       'HMAC',
       cryptoKey,
-      base64urlDecode(signature),
+      signatureBytes,
       encoder.encode(unsigned),
     );
 

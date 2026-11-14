@@ -18,6 +18,8 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const [role, setRole] = useState<Role>(null);
   const [configured, setConfigured] = useState<boolean | null>(null);
+  const [logoutPending, setLogoutPending] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -35,11 +37,37 @@ export default function AdminLoginPage() {
   }, []);
 
   const signOut = async () => {
-    await Promise.allSettled([
+    setLogoutPending(true);
+    setLogoutError('');
+
+    const results = await Promise.allSettled([
       fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }),
       fetch('/api/auth/admin-logout', { method: 'POST', credentials: 'include' }),
     ]);
+
+    const failed = results.some(
+      (result) => result.status === 'rejected' || !result.value.ok,
+    );
+
+    if (failed) {
+      setLogoutError('Could not confirm that both sessions were signed out. Please try again.');
+      try {
+        const response = await fetch('/api/auth/session', { credentials: 'include' });
+        if (response.ok) {
+          const data = await response.json() as { role?: Role };
+          setRole(data.role ?? null);
+        }
+      } catch {
+        setLogoutError('Could not confirm sign-out. Refresh the page and check your session.');
+      } finally {
+        setLogoutPending(false);
+      }
+      return;
+    }
+
     setRole(null);
+    setLogoutPending(false);
+    router.refresh();
   };
 
   return (
@@ -52,13 +80,21 @@ export default function AdminLoginPage() {
           upload archive material. This is a separate session from member access.
         </p>
 
+        {logoutError && <p className="notice notice--warning" role="alert">{logoutError}</p>}
+
         {role === 'admin' ? (
           <div className="signed-in">
             <p>You are signed in as an administrator.</p>
             <div className="btn-row">
               <Link className="btn" href="/admin">Open the admin dashboard</Link>
-              <button className="btn btn-secondary" type="button" onClick={() => void signOut()}>
-                Sign out
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => void signOut()}
+                disabled={logoutPending}
+                aria-busy={logoutPending}
+              >
+                {logoutPending ? 'Signing out…' : 'Sign out'}
               </button>
             </div>
           </div>

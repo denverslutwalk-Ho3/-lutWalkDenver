@@ -32,9 +32,10 @@ export default function PrivacyPage() {
 
         <h2>What other people can see</h2>
         <p>
-          Bulletin posts and gallery images are visible to signed-in members. Uploaded
-          images are served from a public storage URL, so anyone with that link can open
-          the file. Do not upload anything you would not want shared.
+          Bulletin posts and gallery images are visible to signed-in members. New
+          uploads are served through authenticated application routes. Some older
+          uploads may still have public storage permissions until organizers review
+          and update them, so treat links to older files as shareable.
         </p>
 
         <h2>What we do not collect</h2>
