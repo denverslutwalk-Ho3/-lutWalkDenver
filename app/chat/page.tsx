@@ -128,8 +128,10 @@ export default function ChatPage() {
           <p className="eyebrow">Member chat</p>
           <h1 id="chat-title">Private conversations for the community.</h1>
           <p>
-            Messages are encrypted in your browser before they are stored. Only
-            signed-in members can read them here.
+            Messages are encrypted in your browser with a shared room key before
+            they are stored. The key is derived on the server and is available
+            to every signed-in member, so treat this space as community-shared
+            rather than private.
           </p>
         </div>
       </section>
