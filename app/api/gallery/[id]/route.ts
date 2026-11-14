@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAdminDb } from '../../../../lib/firebase-admin';
 import { requireAdmin } from '../../../../lib/authz';
+import { deleteStorageObject } from '../../../../lib/storage-cleanup';
 
 export async function DELETE(
   _request: Request,
@@ -12,6 +13,8 @@ export async function DELETE(
   const { id } = await params;
   try {
     const db = getAdminDb();
+    const doc = await db.collection('galleryAssets').doc(id).get();
+    await deleteStorageObject(doc.data()?.storagePath);
     await db.collection('galleryAssets').doc(id).delete();
     return NextResponse.json({ ok: true });
   } catch (err) {
