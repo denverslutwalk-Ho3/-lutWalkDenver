@@ -67,6 +67,7 @@ const nextConfig = {
 
     const memberPaths = [
       '/admin/:path*',
+      '/ai-chat/:path*',
       '/archive/:path*',
       '/bulletin/:path*',
       '/calendar/:path*',
