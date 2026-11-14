@@ -55,7 +55,7 @@ public/              favicon, icon, manifest, robots, sitemap, published media
 | `/calendar` | member | Events and RSVPs |
 | `/chat` | member | Encrypted member chat |
 | `/community` | member | Shared gallery |
-| `/archive` | member | Static collection plus uploaded archive |
+| `/archive` | member | Protected archive collection plus uploaded archive |
 | `/shop` | member | Store items managed in the admin |
 | `/zines`, `/education`, `/organizing`, `/care` | member | Program pages |
 
@@ -72,7 +72,9 @@ public/              favicon, icon, manifest, robots, sitemap, published media
 
 Firestore collections: `posts` (with a `replies` subcollection), `messages`, `events`, `products`, `galleryAssets`. Files uploaded to Firebase Storage through `/api/upload` are served through authenticated `/api/storage` URLs. Uploading archive, community, and product files is admin-only; signed-in members can read them. Existing objects may retain public access and must be reviewed with the Firebase owner; see the [deployment runbook](./docs/deployment-runbook.md).
 
-Chat messages are encrypted in the browser with a room key derived from `AUTH_SECRET` and delivered only to signed-in members.
+Chat messages are encrypted in the browser with a shared room key derived from `AUTH_SECRET`. The server and every signed-in member can derive the key, so this is not end-to-end encryption and should not be used for confidential messages.
+
+Archive images are stored outside `public/` and streamed by an authenticated API route; do not make those assets public or expose them through a separate CDN origin.
 
 ## Tests
 

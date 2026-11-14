@@ -21,6 +21,9 @@ const nextConfig = {
     ],
     formats: ['image/avif', 'image/webp'],
   },
+  outputFileTracingIncludes: {
+    '/api/archive-media/[filename]': ['./assets/community-media/archive/**/*'],
+  },
 
   async redirects() {
     return [

@@ -31,9 +31,14 @@ export default function PrivacyPage() {
             but they are processed by Mistral under its own terms.
           </li>
           <li>
-            <strong>Nothing else.</strong> There is no analytics, advertising, or
-            third-party tracking script on this site.
+            <strong>Sign-in rate limiting.</strong> To slow repeated password guesses,
+            we store a keyed, non-reversible identifier derived from the client
+            address, the account type, attempt counts, and timestamps in Firestore.
+            We do not store the raw address in these rate-limit records. The records
+            should be removed with the configured Firestore TTL policy; cleanup may
+            happen after the 15-minute limit window has ended.
           </li>
+          <li>There is no analytics, advertising, or third-party tracking script on this site.</li>
         </ul>
 
         <h2>What other people can see</h2>
@@ -44,9 +49,9 @@ export default function PrivacyPage() {
           and update them, so treat links to older files as shareable.
         </p>
         <p>
-          Member chat messages are encrypted in your browser with a shared room key, but
-          that key is derived on the server and available to every signed-in member, so
-          the chat is community-shared rather than private from the site or other members.
+          Member chat messages are encrypted in your browser with a shared room key.
+          That key is derived on the server and available to every signed-in member,
+          so this is not end-to-end encryption and the site can decrypt the messages.
         </p>
 
         <h2>What we do not collect</h2>

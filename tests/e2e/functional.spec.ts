@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { createSessionToken } from './auth-test-helpers';
 
 const MEMBER_PASSWORD = process.env.MEMBER_PASSWORD || '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
@@ -91,6 +92,123 @@ test.describe('API access control', () => {
   test('POST /api/auth/login rejects a wrong password', async ({ request }) => {
     const response = await request.post('/api/auth/login', { data: { password: 'wrong-password' } });
     expect([401, 503]).toContain(response.status());
+  });
+
+  test('archive media reads require a session', async ({ request }) => {
+    const response = await request.get('/api/archive-media/slutwalk-2021-1.jpg');
+    expect(response.status()).toBe(401);
+  });
+
+  test('archive images are not exposed as public static files', async ({ request }) => {
+    const response = await request.get('/media/archive/slutwalk-2021-1.jpg');
+    expect(response.status()).toBe(404);
+  });
+});
+
+test.describe('Session role and revocation checks', () => {
+  test('member session cannot enter the admin dashboard', async ({ page }) => {
+    await page.goto('/');
+    await page.context().addCookies([{
+      name: 'sw_auth',
+      value: createSessionToken('member'),
+      url: new URL(page.url()).origin,
+      httpOnly: true,
+      sameSite: 'Lax',
+    }]);
+
+    await page.goto('/admin');
+    await expect(page).toHaveURL(/\/admin-login\?next=%2Fadmin/);
+  });
+
+  test('admin session can enter the admin dashboard', async ({ page }) => {
+    await page.goto('/');
+    await page.context().addCookies([{
+      name: 'sw_admin',
+      value: createSessionToken('admin'),
+      url: new URL(page.url()).origin,
+      httpOnly: true,
+      sameSite: 'Lax',
+    }]);
+
+    await page.goto('/admin');
+    await expect(page).toHaveURL(/\/admin$/);
+    await expect(page.getByRole('heading', { name: /Manage the community hub/i })).toBeVisible();
+  });
+
+  test('old member sessions are rejected after password rotation', async ({ page }) => {
+    await page.goto('/');
+    await page.context().addCookies([{
+      name: 'sw_auth',
+      value: createSessionToken('member', 'previous-member-password'),
+      url: new URL(page.url()).origin,
+      httpOnly: true,
+      sameSite: 'Lax',
+    }]);
+
+    await page.goto('/bulletin');
+    await expect(page).toHaveURL(/\/login\?next=%2Fbulletin/);
+  });
+
+  test('archive media is served only to signed-in members', async ({ page }) => {
+    await page.goto('/');
+    await page.context().addCookies([{
+      name: 'sw_auth',
+      value: createSessionToken('member'),
+      url: new URL(page.url()).origin,
+      httpOnly: true,
+      sameSite: 'Lax',
+    }]);
+    const authorizedResponse = await page.request.get('/api/archive-media/slutwalk-2021-1.jpg');
+    expect(authorizedResponse.status()).toBe(200);
+    expect(authorizedResponse.headers()['content-type']).toBe('image/jpeg');
+    expect(authorizedResponse.headers()['cache-control']).toBe('private, no-store');
+  });
+
+  test('event Edit opens the form and saves changes', async ({ page }) => {
+    let updatedEvent: Record<string, unknown> | undefined;
+    await page.route('**/api/posts**', (route) => route.fulfill({ json: { posts: [] } }));
+    await page.route('**/api/products**', (route) => route.fulfill({ json: { products: [] } }));
+    await page.route('**/api/gallery**', (route) => route.fulfill({ json: { assets: [] } }));
+    await page.route('**/api/events**', async (route) => {
+      if (route.request().method() === 'PATCH') {
+        updatedEvent = route.request().postDataJSON() as Record<string, unknown>;
+        await route.fulfill({ json: { ok: true } });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          events: [{
+            id: 'meeting-1',
+            title: 'Community meeting',
+            date: '2026-11-20',
+            time: '5:00 PM',
+            location: 'Library',
+            description: 'Monthly check-in',
+          }],
+        },
+      });
+    });
+
+    await page.goto('/');
+    await page.context().addCookies([{
+      name: 'sw_admin',
+      value: createSessionToken('admin'),
+      url: new URL(page.url()).origin,
+      httpOnly: true,
+      sameSite: 'Lax',
+    }]);
+    await page.goto('/admin');
+    await page.getByRole('button', { name: 'Events', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit Community meeting' }).click();
+    await expect(page.getByRole('heading', { name: 'Edit event' })).toBeVisible();
+    await page.locator('#evt-title').fill('Updated meeting');
+    await page.locator('#evt-date').fill('2026-11-21');
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByText('Event updated')).toBeVisible();
+    expect(updatedEvent).toMatchObject({
+      title: 'Updated meeting',
+      date: '2026-11-21',
+    });
   });
 });
 

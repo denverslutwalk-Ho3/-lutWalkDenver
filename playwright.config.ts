@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { E2E_ADMIN_PASSWORD, E2E_AUTH_SECRET, E2E_MEMBER_PASSWORD } from './tests/e2e/auth-test-helpers';
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
@@ -42,5 +43,11 @@ export default defineConfig({
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
+        env: {
+          ...process.env,
+          AUTH_SECRET: E2E_AUTH_SECRET,
+          MEMBER_PASSWORD: E2E_MEMBER_PASSWORD,
+          ADMIN_PASSWORD: E2E_ADMIN_PASSWORD,
+        },
       },
 });

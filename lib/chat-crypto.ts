@@ -1,4 +1,4 @@
-export type E2EEncryptedPayload = {
+export type EncryptedChatPayload = {
   type: 'aes-gcm';
   iv: string;
   ciphertext: string;
@@ -20,7 +20,7 @@ function fromBase64(value: string) {
   return bytes;
 }
 
-export async function encryptText(plaintext: string, key: CryptoKey): Promise<E2EEncryptedPayload> {
+export async function encryptText(plaintext: string, key: CryptoKey): Promise<EncryptedChatPayload> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoded = new TextEncoder().encode(plaintext);
   const ciphertextBuffer = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
@@ -37,7 +37,7 @@ export async function encryptText(plaintext: string, key: CryptoKey): Promise<E2
   };
 }
 
-export async function decryptText(payload: E2EEncryptedPayload, key: CryptoKey): Promise<string> {
+export async function decryptText(payload: EncryptedChatPayload, key: CryptoKey): Promise<string> {
   const iv = fromBase64(payload.iv);
   const ciphertext = fromBase64(payload.ciphertext);
   const authTag = fromBase64(payload.authTag);

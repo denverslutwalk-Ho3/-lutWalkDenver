@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getAdminStorage } from '../../../lib/firebase-admin';
 import { getServerSession } from '../../../lib/authz';
+import { readBodyWithinLimit } from '../../../lib/bounded-body';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 // Allowance for multipart boundaries and form fields around the file itself.
 const MAX_UPLOAD_OVERHEAD = 1024 * 1024;
+const MAX_REQUEST_SIZE = MAX_FILE_SIZE + MAX_UPLOAD_OVERHEAD;
 const ALLOWED_TYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -24,11 +26,22 @@ export async function POST(request: Request) {
   try {
     // Reject oversized uploads before parsing the body into formData.
     const contentLength = Number(request.headers.get('content-length') ?? '0');
-    if (Number.isFinite(contentLength) && contentLength > MAX_FILE_SIZE + MAX_UPLOAD_OVERHEAD) {
+    if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_SIZE) {
       return NextResponse.json({ error: 'File exceeds 10 MB limit' }, { status: 413 });
     }
 
-    const formData = await request.formData();
+    const body = await readBodyWithinLimit(request.body, MAX_REQUEST_SIZE);
+    if (!body) {
+      return NextResponse.json({ error: 'File exceeds 10 MB limit' }, { status: 413 });
+    }
+    const requestBody = new ArrayBuffer(body.byteLength);
+    new Uint8Array(requestBody).set(body);
+    const boundedRequest = new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: requestBody,
+    });
+    const formData = await boundedRequest.formData();
     const file = formData.get('file');
 
     if (!(file instanceof File)) {
