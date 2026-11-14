@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: '/bulletin', label: 'Bulletin' },
   { href: '/calendar', label: 'Calendar' },
   { href: '/chat', label: 'Chat' },
+  { href: '/ai-chat', label: 'AI Chat' },
   { href: '/zines', label: 'Zines' },
   { href: '/shop', label: 'Store' },
   { href: '/donate', label: 'Donate' },
@@ -78,7 +79,7 @@ export default function SiteHeader() {
                   {item.label}
                 </Link>
               </li>
-            ))}
+            ))
           </ul>
         </nav>
 
