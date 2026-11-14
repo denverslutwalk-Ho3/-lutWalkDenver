@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { signToken } from '../../../../lib/auth';
 import { isMemberLoginConfigured, verifyMemberPassword } from '../../../../lib/passwords';
 import { clearLoginAttempts, consumeLoginAttempt } from '../../../../lib/login-rate-limit';
+import { memberPasswordVersion } from '../../../../lib/session-version';
 
 // SameSite=Lax on the session cookie already blocks cross-site form/fetch
 // POSTs from carrying credentials, so no separate Origin comparison is needed
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const token = signToken({ sub: 'member' });
+  const token = signToken({ sub: 'member', pv: memberPasswordVersion() });
   const response = NextResponse.json({ ok: true });
 
   response.cookies.set({
