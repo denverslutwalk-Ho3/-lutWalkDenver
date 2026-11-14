@@ -1,218 +1,156 @@
-# Deployment runbook
+# AWS Amplify deployment runbook
 
-This app is not a static placeholder site. It requires a Node.js runtime that can run Next.js App Router server code, serverless API routes, Firebase Admin SDK calls, and middleware.
+## Status and scope
 
-## Recommended production architecture
+Checked on 2026-11-14. This is a deployment preparation guide; no AWS, GitHub, or Porkbun account settings have been changed and no deployment has been run.
 
-For production, the most reliable setup is:
+- Repository: `denverslutwalk-Ho3/-lutWalkDenver`, default/target production branch `main`.
+- Hosting target: AWS Amplify Hosting, Next.js SSR compute.
+- Registrar and DNS provider: Porkbun (as supplied by the domain owner).
+- Canonical hostname: `https://slutwalkdenver.gay/`.
+- The repository has no confirmed Amplify app, GitHub-to-Amplify connection, deployment history, or production secrets.
+- Public checks made earlier in this session found the apex returning a GitHub Pages 404 and `www` parking/redirecting to the apex. The apex resolved to GitHub Pages addresses. Recheck before making any DNS change.
 
-- Ubuntu server
-- Nginx as the reverse proxy
-- Porkbun for DNS
-- TLS certificate installed on the server and served by Nginx
-- Next.js running locally on port 3000 behind Nginx
+## Repository and application audit
 
-This repository is already set up for that flow through the Next.js app, middleware, auth routes, Firebase helpers, and the canonical domain files.
+This is a root-level npm application (not a monorepo) using `package.json` and the committed `package-lock.json`. It uses Next.js 15.5.29, React 19.2.8, and Firebase Admin 14.5.1. The locked Firebase Admin version declares Node.js `>=22`; `.nvmrc`, `package.json`'s engine, CI, and the Amplify build spec require Node 22.
 
-## Required stack
+The Next.js App Router contains public pages, member pages, `/admin`, and API route handlers for auth, posts, events, products, gallery, messages, and uploads. The app uses `next build` and has no static-export setting or `next export` command. There is no root or `public/index.html`; `/` is the App Router page. `public/CNAME` is retained as a legacy domain marker; it does not configure Amplify or replace the Next.js root route.
 
-- Package manager: npm, using the committed `package-lock.json`
-- Framework/build pipeline: Next.js App Router
-- Build command: `npm ci` then `npm run build`
-- Runtime: `npm run start`
-- Database/storage: Firebase Firestore and Firebase Storage
-- Custom domain: `slutwalkdenver.gay`
+### Amplify compatibility
 
-## Environment setup
+AWS currently documents support for Next.js versions 12–15 with SSR compute, including App Router, API routes, dynamic routes, middleware, environment variables, and image optimization. AWS explicitly does **not** support Edge middleware.
 
-### Local development
+The repository's middleware was relying on Next.js's default Edge runtime. It now declares `runtime: 'nodejs'`. Next.js 15.5.29 supports the stable Node.js middleware runtime. Middleware uses Web Crypto to validate the existing signed cookies and does not import Firebase Admin or other Node-only packages. API handlers use the Node.js runtime by default, as required by Firebase Admin.
 
-1. Copy `.env.example` to `.env.local`.
-2. Fill in the required values:
-   - `AUTH_SECRET`
-   - `MEMBER_PASSWORD`
-   - `ADMIN_PASSWORD`
-   - Firebase Admin values if the bulletin, calendar, gallery, store, or uploads should work
+The checked-in [amplify.yml](../amplify.yml) pins the build to Node 22 via [`.nvmrc`](../.nvmrc), installs with `npm ci`, builds with `npm run build`, and publishes the `.next` Next.js SSR artifact. AWS documentation says a checked-in build spec overrides console build settings, so its `.next` artifact path is explicitly set. No static `out` directory or `output: 'export'` is configured.
 
-### Production deployment
+**Compute-runtime verification remains outstanding:** the AWS support guide confirms the Next.js 15 platform and excludes Edge middleware, but this repository cannot inspect the future Amplify app's actual SSR compute runtime. Confirm the deployed compute can run Node 22 or newer (required by the locked Firebase Admin package) before connecting production traffic. The build spec selects the build-image Node version; it is not proof of the managed SSR runtime version.
 
-Use a production environment file or systemd environment file such as:
+AWS references:
 
-```bash
-/var/www/slutwalkdenver/.env.production
+- [Amplify support for Next.js](https://docs.aws.amazon.com/amplify/latest/userguide/ssr-amplify-support.html)
+- [Deploying a Next.js SSR application](https://docs.aws.amazon.com/amplify/latest/userguide/deploy-nextjs-app.html)
+- [Amplify build settings](https://docs.aws.amazon.com/amplify/latest/userguide/build-settings.html)
+- [Next.js 15 middleware runtime](https://nextjs.org/docs/15/app/api-reference/file-conventions/middleware)
+
+## Authentication and access control
+
+- `/` is public and links to member sign-in at `/login`.
+- `/api/auth/login` issues the member `sw_auth` cookie; `/api/auth/admin-login` issues the separate admin `sw_admin` cookie.
+- Member sessions last 30 days; admin sessions last 8 hours. Both cookies are `HttpOnly`, `SameSite=Lax`, path `/`, and `Secure` in production.
+- Middleware checks the signed role claim. Member routes accept a member or admin claim; `/admin` requires the admin claim.
+- API handlers also check authorization server-side; write routes for events, products, and gallery assets require admin authorization.
+- Login clears the other role's session cookie. Do not weaken middleware, change the cookie names, or disable `Secure`.
+
+The authentication values are read server-side from environment variables. Do not put passwords, `AUTH_SECRET`, Firebase service-account identifiers, or Firebase private keys in `NEXT_PUBLIC_*` variables, client components, source files, workflow secrets, or logs.
+
+## Environment variables and secret handling
+
+The current code references:
+
+| Variable | Classification | Use |
+| --- | --- | --- |
+| `AUTH_SECRET` | Server secret | Signs member/admin cookies and derives the chat room key. |
+| `MEMBER_PASSWORD` | Server secret | Shared member password. |
+| `ADMIN_PASSWORD` | Server secret | Separate admin password. |
+| `FIREBASE_PROJECT_ID` | Server configuration | Firebase Admin project identifier. |
+| `FIREBASE_CLIENT_EMAIL` | Server credential identifier | Firebase Admin service-account email. |
+| `FIREBASE_PRIVATE_KEY` | Server secret | Firebase Admin private key; code converts escaped `\n` into newlines. |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Public identifier, currently read server-side | Bucket name passed to Firebase Admin Storage. This is not a credential. |
+
+No Firebase client SDK or client Firebase configuration is used by the current application. `.env.example` contains placeholders only; `.gitignore` excludes local environment files and common credential files. Never store real values in the repository.
+
+**Amplify secret handling is a deployment blocker to resolve before production.** AWS's Next.js SSR instructions say build-time Amplify variables are not automatically available to the Next.js server runtime; the documented approach writes selected variables to `.env.production` before the build. AWS warns that credentials in deployment artifacts can be read by users with artifact access. This repo's `.env.production` must not contain passwords, signing keys, or the Firebase private key without an explicitly accepted access/security model.
+
+Before deploying, choose and verify a supported way for the SSR compute to obtain server secrets without exposing them in downloadable artifacts. For example, an account owner/security engineer can authorize a runtime secrets integration using AWS Systems Manager Parameter Store or Secrets Manager and an appropriately scoped Amplify SSR compute role. **This repository does not currently implement runtime retrieval from AWS secret storage.** Do not assume Amplify console environment variables alone solve that runtime problem; verify the selected mechanism with a test secret in a non-production branch and inspect its artifacts/logs before supplying production values. The workflow/build spec intentionally does not copy environment variables to `.env.production`.
+
+If passwords were pasted into chat or other shared systems, treat them as exposed and replace them through an authorized secret-management process before production. Changing `AUTH_SECRET` invalidates existing sessions and changes the chat key; coordinate that change with the application owner.
+
+## Firebase readiness
+
+`lib/firebase-admin.ts` lazily initializes Firebase Admin for Firestore and Storage from the project ID, service-account email, private key, and bucket name. The API routes use Firestore collections for posts/replies, messages, events, products, and gallery assets; uploads use Firebase Storage. No Firebase client API key/Auth credential is referenced.
+
+The repository contains no `firebase.json`, Firestore rules, or Storage rules to review or deploy. Firebase Admin uses service-account IAM and bypasses client Security Rules; do not broaden service-account permissions or weaken rules to make deployment work. Confirm the production project, enabled Firestore/Storage services, and least-privilege service-account access with the Firebase owner.
+
+**Privacy risk to review:** `/api/upload` calls `makePublic()` for uploaded files. The route requires a signed-in session and applies additional role checks for certain folders, but uploaded objects are then publicly readable by URL. The app documentation already describes uploads as public. Confirm this is acceptable for every upload, especially archive/community material, before production; this runbook does not change that existing behavior.
+
+## Connect GitHub to AWS Amplify (manual account action)
+
+1. In the AWS Amplify console, choose **Create new app** and authorize the AWS Amplify GitHub App to access only the intended repository.
+2. Select `denverslutwalk-Ho3/-lutWalkDenver` and branch `main`. Keep `main` as the only production branch.
+3. Use the repository root as the app root. Confirm Amplify detects Next.js SSR/compute, not static export.
+4. Review the committed `amplify.yml`; do not override it with an `out` artifact or static adapter.
+5. Configure a least-privilege Amplify service role and an SSR compute role only if needed for the approved runtime secrets integration.
+6. Require the GitHub Actions CI check before merging to `main` using repository branch protection. Verify the check is required; that repository setting is not managed here.
+7. If Amplify pull-request previews are enabled, keep them on preview hostnames, do not bind the production domain, and do not provide production secrets to untrusted PR builds.
+8. Confirm the first successful Amplify build is from the intended reviewed `main` commit before custom-domain setup.
+
+GitHub Actions in `.github/workflows/ci.yml` runs install, lint, TypeScript, unit tests, and build for PRs and pushes to `main`; it has read-only repository permission and no production credentials. It is a verification workflow, not a deployment workflow.
+
+## Connect `slutwalkdenver.gay` through Porkbun (manual account action)
+
+First deploy the app to its Amplify-provided domain and confirm it is healthy. Then:
+
+1. In the Amplify console, open the deployed app's **Hosting → Custom domains**, choose **Add domain**, and enter `slutwalkdenver.gay`.
+2. Choose manual third-party DNS configuration; do not change Porkbun nameservers or migrate DNS as part of this runbook.
+3. Configure the domain mapping with the apex `slutwalkdenver.gay` attached to the production `main` branch and set `www.slutwalkdenver.gay` to redirect to the apex. AWS's default mapping may instead make the apex redirect to `www`; change the mapping to match the required apex canonical domain.
+4. Select the Amplify-managed certificate unless the owner has a specific approved certificate plan.
+5. In Amplify's **View DNS records**, copy the exact generated validation and routing record names/values. AWS generates app- and certificate-specific values; they cannot be known or safely invented before this account-side step.
+6. In Porkbun DNS, inspect the complete existing zone before edits. Add only the records Amplify displays (typically certificate/domain-validation CNAMEs, a `www` CNAME, and an apex ALIAS/ANAME where supported). Do not use records from examples or this document. Preserve MX, existing mail-related TXT, and unrelated verification/service records. Replace only conflicting website records after confirming their purpose.
+7. Keep the ACM validation CNAME in Porkbun; AWS uses it for certificate validation/renewal. Do not delete it after initial verification.
+8. Wait for Amplify to show the domain as available and certificate as issued before switching production traffic. If Porkbun cannot represent the apex ALIAS/ANAME Amplify requires, stop and ask the domain owner/AWS support for an approved DNS approach; do not change nameservers without explicit approval.
+
+AWS references:
+
+- [Custom domains with third-party DNS providers](https://docs.aws.amazon.com/amplify/latest/userguide/to-add-a-custom-domain-managed-by-a-third-party-dns-provider.html)
+- [Amplify custom domains](https://docs.aws.amazon.com/amplify/latest/userguide/custom-domains.html)
+- [Porkbun DNS records](https://kb.porkbun.com/category/14-dns)
+
+Verify only after the Amplify app/domain setup completes:
+
+```sh
+dig slutwalkdenver.gay A
+dig slutwalkdenver.gay AAAA
+dig slutwalkdenver.gay CNAME
+dig www.slutwalkdenver.gay CNAME
+curl -sSIL https://slutwalkdenver.gay/
+curl -sSIL https://www.slutwalkdenver.gay/
+curl -sSIL http://slutwalkdenver.gay/
 ```
 
-At minimum, set:
+Confirm the apex returns the current app, the certificate is valid, HTTP redirects to HTTPS, and `www` ends at `https://slutwalkdenver.gay/`. Public resolution or a certificate alone is not proof that the current app is deployed.
 
-```env
-NODE_ENV=production
-AUTH_SECRET=replace-with-a-long-random-string
-MEMBER_PASSWORD=replace-with-member-password
-ADMIN_PASSWORD=replace-with-admin-password
-```
+## Deployment, verification, rollback
 
-The three values above are required. There are no default passwords: if a
-password is unset, that role cannot sign in.
+After account-owner setup and required CI checks, merge reviewed changes to `main`. Amplify should automatically build the connected production branch. Confirm the commit ID and successful build in Amplify before announcement.
 
-For the bulletin, calendar, gallery, store, and uploads, also add the Firebase
-Admin service account:
+Post-deployment checks:
 
-```env
-FIREBASE_PROJECT_ID=...
-FIREBASE_CLIENT_EMAIL=...
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
-```
+- Public `/` serves the current app.
+- `/login` and `/admin-login` are separate gates.
+- Anonymous requests to member pages and `/admin` redirect to the correct gate.
+- Member login grants member access but not `/admin`; admin login grants admin access and keeps the separate role claim.
+- Login response cookies are `HttpOnly`, `Secure`, `SameSite=Lax`, path `/`, with the intended expiration.
+- Protected API requests are unauthorized without a session; test authorized Firebase routes with non-production test data.
+- Firebase-backed reads/writes work against the intended production project, and Storage public-read behavior is explicitly approved.
+- Canonical apex, `www` redirect, HTTPS/TLS, and DNS validation work from an external resolver.
+- No production secret appears in build logs, browser bundles, downloadable artifacts, or error output.
 
-## Server setup on Ubuntu
+For rollback, use Amplify's deployment history to redeploy the last known-good production build. If the code change caused the failure, revert it through a reviewed commit to `main` and let CI/Amplify build it. Confirm the rollback commit and repeat route, auth, Firebase, and domain checks. Do not point the domain to an unreviewed PR preview.
 
-### 1. Install Node.js and Nginx
+## Dependency security
 
-```bash
-sudo apt update
-sudo apt install -y nginx nodejs npm build-essential
-```
-
-### 2. Deploy the app
-
-```bash
-sudo mkdir -p /var/www/slutwalkdenver
-cd /var/www/slutwalkdenver
-sudo git clone <your-repo-url> .
-sudo npm ci
-sudo npm run build
-```
-
-### 3. Create a systemd service
-
-Create `/etc/systemd/system/slutwalkdenver.service` with:
-
-```ini
-[Unit]
-Description=SlutWalk Denver Next.js App
-After=network.target
-
-[Service]
-WorkingDirectory=/var/www/slutwalkdenver
-Environment=NODE_ENV=production
-EnvironmentFile=/var/www/slutwalkdenver/.env.production
-ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1 --port 3000
-Restart=always
-RestartSec=10
-User=www-data
-Group=www-data
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then enable and start it:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable slutwalkdenver
-sudo systemctl start slutwalkdenver
-sudo systemctl status slutwalkdenver
-```
-
-## Nginx reverse proxy with Porkbun SSL
-
-### 1. Put the certificate files in place
-
-Assuming your Porkbun files are available locally:
-
-```bash
-sudo mkdir -p /etc/ssl/certs /etc/ssl/private
-sudo cp /path/to/slutwalkdenver.crt /etc/ssl/certs/slutwalkdenver.crt
-sudo cp /path/to/slutwalkdenver.key /etc/ssl/private/slutwalkdenver.key
-sudo cp /path/to/ca-bundle.crt /etc/ssl/certs/ca-bundle.crt
-sudo chmod 600 /etc/ssl/private/slutwalkdenver.key
-sudo chmod 644 /etc/ssl/certs/slutwalkdenver.crt /etc/ssl/certs/ca-bundle.crt
-```
-
-### 2. Create the Nginx site config
-
-Create `/etc/nginx/sites-available/slutwalkdenver` with:
-
-```nginx
-server {
-    listen 80;
-    server_name slutwalkdenver.gay www.slutwalkdenver.gay;
-    return 301 https://slutwalkdenver.gay$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name slutwalkdenver.gay;
-
-    ssl_certificate /etc/ssl/certs/slutwalkdenver.crt;
-    ssl_certificate_key /etc/ssl/private/slutwalkdenver.key;
-    ssl_trusted_certificate /etc/ssl/certs/ca-bundle.crt;
-
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers on;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 1d;
-
-    client_max_body_size 50M;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
-
-If you want an explicit HTTPS www redirect, add a separate block for `www.slutwalkdenver.gay` that returns `301 https://slutwalkdenver.gay$request_uri;`.
-
-### 3. Enable the site
-
-```bash
-sudo ln -s /etc/nginx/sites-available/slutwalkdenver /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-## DNS with Porkbun
-
-In Porkbun, add:
-
-- A record for `@` pointing to your server public IP
-- CNAME record for `www` pointing to `slutwalkdenver.gay`
-
-This lets Nginx handle the redirect from `www` to the apex domain.
+The lockfile was refreshed with non-forced, semver-compatible audit updates; it now resolves Next.js 15.5.29 and Firebase Admin 14.5.1. The last `npm audit --omit=dev` reported one moderate Next.js and one high PostCSS advisory; the available fix would require a Next.js 16 major upgrade. The full audit also reported two critical development-tool advisories in Vitest/Tinypool; the suggested remediation is a Vitest 5 major upgrade. No major upgrade was forced. Re-run `npm audit` and schedule separately reviewed/tested framework and test-runner upgrades before treating the dependency tree as clear.
 
 ## Local verification
 
-```bash
+```sh
 npm ci
+npm run lint
+npx tsc --noEmit
+npm test
 npm run build
-npm run start
 ```
 
-Then open `http://localhost:3000` and verify login, protected routes, and `/api/*` routes.
-
-## Production verification
-
-```bash
-sudo systemctl status slutwalkdenver
-sudo systemctl status nginx
-curl -I http://slutwalkdenver.gay
-curl -I https://slutwalkdenver.gay
-curl -I https://www.slutwalkdenver.gay
-```
-
-Expected behavior:
-
-- HTTP redirects to HTTPS
-- `www` redirects to the apex domain
-- HTTPS serves the Next.js app correctly
-- Auth cookies work over the custom domain
+`npm run start` is for local production-mode validation. Amplify manages its deployed Next.js compute runtime; do not add a static `next export` or standalone static server command.

@@ -1,8 +1,6 @@
 /**
- * Edge-runtime JWT verification using the Web Crypto API.
- * Next.js middleware runs in the Edge runtime, so it cannot import Node.js modules
- * (such as the `crypto` built-in used in lib/auth.ts). This module provides an
- * async verifyToken that is compatible with both Edge and Node.js runtimes.
+ * Middleware JWT verification using Web Crypto, compatible with the Edge and
+ * Node.js runtimes.
  */
 
 function base64urlDecode(b64url: string): ArrayBuffer {

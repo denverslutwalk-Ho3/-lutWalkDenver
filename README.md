@@ -83,3 +83,7 @@ npm run test:responsive                                    # layout checks
 ```
 
 The Playwright config builds and starts the app automatically.
+
+## Deployment
+
+The app requires a Node.js/Next.js server runtime (Node.js 22 or newer); it is not configured for static export. GitHub Actions verifies pull requests and pushes to `main`, but does not deploy. AWS Amplify Hosting and the Porkbun-managed domain still require account-owner setup. See the [deployment runbook](docs/deployment-runbook.md) for Amplify compatibility, environment-variable risks, DNS setup, verification, and rollback.
