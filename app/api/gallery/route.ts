@@ -2,9 +2,13 @@ import { NextResponse } from 'next/server';
 import { FieldValue, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { getAdminDb } from '../../../lib/firebase-admin';
 import { requireAdmin, requireMemberOrAdmin } from '../../../lib/authz';
+import { collectMatchingItems } from '../../../lib/gallery-pagination';
 
 type GalleryCollection = 'archive' | 'community';
 type GalleryCategory = 'photos' | 'flyers' | 'press' | 'zines' | 'general';
+const GALLERY_PAGE_SIZE = 200;
+const GALLERY_COLLECTIONS: GalleryCollection[] = ['archive', 'community'];
+const GALLERY_CATEGORIES: GalleryCategory[] = ['photos', 'flyers', 'press', 'zines', 'general'];
 type GalleryAssetRecord = {
   id: string;
   title?: string;
@@ -13,6 +17,7 @@ type GalleryAssetRecord = {
   category?: string;
   imageUrl?: string;
   storagePath?: string;
+  contentType?: string;
   createdAt?: unknown;
 };
 
@@ -25,27 +30,47 @@ export async function GET(request: Request) {
   const collectionFilter = searchParams.get('collection');
   const categoryFilter = searchParams.get('category');
   const limitParam = Number(searchParams.get('limit') ?? '100');
-  const limit = Math.min(Math.max(1, limitParam), 200);
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(1, limitParam), 200) : 100;
+  if (
+    (collectionFilter && !GALLERY_COLLECTIONS.includes(collectionFilter as GalleryCollection))
+    || (categoryFilter && !GALLERY_CATEGORIES.includes(categoryFilter as GalleryCategory))
+  ) {
+    return NextResponse.json({ assets: [] });
+  }
 
   try {
     const db = getAdminDb();
-    const snap = await db.collection('galleryAssets').orderBy('createdAt', 'desc').limit(limit).get();
-
-    const assets = snap.docs
-      .map((doc: QueryDocumentSnapshot) => ({ id: doc.id, ...doc.data() }) as GalleryAssetRecord)
-      .filter((asset: GalleryAssetRecord) => {
+    const collectionRef = db.collection('galleryAssets');
+    const assets = await collectMatchingItems(
+      async (cursor) => {
+        let query = collectionRef.orderBy('createdAt', 'desc').limit(GALLERY_PAGE_SIZE);
+        if (cursor) query = query.startAfter(cursor);
+        const page = await query.get();
+        return {
+          items: page.docs.map((doc: QueryDocumentSnapshot) => ({
+            id: doc.id,
+            ...doc.data(),
+          }) as GalleryAssetRecord),
+          nextCursor: page.docs.at(-1),
+          hasMore: page.docs.length === GALLERY_PAGE_SIZE,
+        };
+      },
+      (asset) => {
         if (collectionFilter && asset.collection !== collectionFilter) return false;
         if (categoryFilter && asset.category !== categoryFilter) return false;
         return true;
-      })
-      .map((asset: GalleryAssetRecord) => asset.storagePath
+      },
+      limit,
+    );
+
+    const responseAssets = assets.map((asset) => asset.storagePath
         ? {
             ...asset,
             imageUrl: `/api/storage?path=${encodeURIComponent(asset.storagePath)}`,
           }
         : asset);
 
-    return NextResponse.json({ assets });
+    return NextResponse.json({ assets: responseAssets });
   } catch (err) {
     console.error('GET /api/gallery error:', err);
     return NextResponse.json({ error: 'Failed to load gallery assets' }, { status: 500 });
@@ -65,6 +90,7 @@ export async function POST(request: Request) {
       category?: unknown;
       imageUrl?: unknown;
       storagePath?: unknown;
+      contentType?: unknown;
     };
 
     const title = typeof body.title === 'string' ? body.title.trim() : '';
@@ -73,6 +99,7 @@ export async function POST(request: Request) {
     const category = typeof body.category === 'string' ? body.category.trim() : 'general';
     const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : '';
     const storagePath = typeof body.storagePath === 'string' ? body.storagePath.trim() : '';
+    const contentType = typeof body.contentType === 'string' ? body.contentType.trim() : '';
 
     const validCollections: GalleryCollection[] = ['archive', 'community'];
     const validCategories: GalleryCategory[] = ['photos', 'flyers', 'press', 'zines', 'general'];
@@ -96,6 +123,7 @@ export async function POST(request: Request) {
       category,
       imageUrl,
       storagePath,
+      contentType,
       createdAt: FieldValue.serverTimestamp(),
     });
 

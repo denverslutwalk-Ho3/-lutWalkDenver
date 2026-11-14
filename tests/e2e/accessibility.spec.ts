@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { createSessionToken } from './auth-test-helpers';
 
 const PUBLIC_PAGES = [
   { name: 'landing', url: '/' },
@@ -23,6 +24,29 @@ const PROTECTED_PAGES = [
   { name: 'archive', url: '/archive' },
 ];
 
+async function mockProtectedPageApis(page: import('@playwright/test').Page) {
+  await page.route('**/api/**', async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.startsWith('/api/archive-media/')) {
+      await route.continue();
+      return;
+    }
+
+    let response: Record<string, unknown> = {};
+    if (pathname === '/api/auth/session') response = { role: 'member' };
+    else if (pathname === '/api/posts') response = { posts: [] };
+    else if (pathname.startsWith('/api/posts/')) response = { replies: [] };
+    else if (pathname === '/api/events') response = { events: [] };
+    else if (pathname === '/api/products') response = { products: [] };
+    else if (pathname === '/api/gallery') response = { assets: [] };
+    else if (pathname === '/api/messages/key') {
+      response = { key: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' };
+    } else if (pathname === '/api/messages') response = { messages: [] };
+
+    await route.fulfill({ status: 200, json: response });
+  });
+}
+
 test.describe('Accessibility — axe-core WCAG AA', () => {
   for (const page of PUBLIC_PAGES) {
     test(`${page.name} — 0 axe violations`, async ({ page: browserPage }) => {
@@ -37,27 +61,15 @@ test.describe('Accessibility — axe-core WCAG AA', () => {
   }
 
   for (const page of PROTECTED_PAGES) {
-    test(`${page.name} — 0 axe violations (authenticated)`, async ({ page: browserPage, request }) => {
-      const memberPassword = process.env.MEMBER_PASSWORD;
-      test.skip(!memberPassword, 'MEMBER_PASSWORD not set');
-
-      const response = await request.post('/api/auth/login', {
-        data: { password: memberPassword?.trim() },
-      });
-      test.skip(!response.ok(), 'Auth failed — skipping authenticated a11y test');
-
-      const setCookie = await response.headers()['set-cookie'];
-      if (setCookie) {
-        const match = setCookie.match(/sw_auth=([^;]+)/);
-        if (match) {
-          await browserPage.context().addCookies([{
-            name: 'sw_auth',
-            value: match[1],
-            url: process.env.BASE_URL || 'http://localhost:3000',
-          }]);
-        }
-      }
-
+    test(`${page.name} — 0 axe violations (authenticated)`, async ({ page: browserPage }) => {
+      await mockProtectedPageApis(browserPage);
+      await browserPage.context().addCookies([{
+        name: 'sw_auth',
+        value: createSessionToken('member'),
+        url: process.env.BASE_URL || 'http://localhost:3000',
+        httpOnly: true,
+        sameSite: 'Lax',
+      }]);
       await browserPage.goto(page.url);
       const results = await new AxeBuilder({ page: browserPage })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])

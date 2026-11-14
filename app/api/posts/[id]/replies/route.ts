@@ -41,11 +41,22 @@ export async function POST(
       return NextResponse.json({ error: 'Reply is too long (4000 characters max)' }, { status: 400 });
     }
     const db = getAdminDb();
-    const ref = await db.collection('posts').doc(id).collection('replies').add({
-      text, sender, createdAt: FieldValue.serverTimestamp(),
+    const postRef = db.collection('posts').doc(id);
+    const replyRef = postRef.collection('replies').doc();
+    const created = await db.runTransaction(async (transaction) => {
+      const post = await transaction.get(postRef);
+      if (!post.exists) return false;
+
+      transaction.create(replyRef, {
+        text,
+        sender,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      transaction.update(postRef, { replyCount: FieldValue.increment(1) });
+      return true;
     });
-    await db.collection('posts').doc(id).update({ replyCount: FieldValue.increment(1) });
-    return NextResponse.json({ id: ref.id }, { status: 201 });
+    if (!created) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    return NextResponse.json({ id: replyRef.id }, { status: 201 });
   } catch (err) {
     console.error('POST /api/posts/[id]/replies error:', err);
     return NextResponse.json({ error: 'Failed to create reply' }, { status: 500 });

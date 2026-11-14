@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { isPdfGalleryAsset } from '../../lib/gallery-assets';
 
 type GalleryAsset = {
   id: string;
@@ -9,6 +10,8 @@ type GalleryAsset = {
   description?: string;
   category?: 'photos' | 'flyers' | 'press' | 'zines' | 'general';
   imageUrl: string;
+  storagePath?: string;
+  contentType?: string;
 };
 
 const ARCHIVE_CATEGORIES: Array<GalleryAsset['category']> = ['photos', 'flyers', 'press', 'zines', 'general'];
@@ -110,14 +113,20 @@ export default function ArchivePage() {
                 <div className="shop-grid" role="list">
                   {categoryAssets.map((asset) => (
                     <article key={asset.id} className="product-card" role="listitem">
-                      <Image
-                        src={asset.imageUrl}
-                        alt={asset.title}
-                        width={600}
-                        height={400}
-                        className="product-img"
-                        unoptimized
-                      />
+                      {isPdfGalleryAsset(asset.contentType, asset.storagePath) ? (
+                        <a className="btn btn-secondary" href={asset.imageUrl}>
+                          Download PDF: {asset.title}
+                        </a>
+                      ) : (
+                        <Image
+                          src={asset.imageUrl}
+                          alt={asset.title}
+                          width={600}
+                          height={400}
+                          className="product-img"
+                          unoptimized
+                        />
+                      )}
                       <div className="product-info">
                         <h3>{asset.title}</h3>
                         {asset.description ? <p>{asset.description}</p> : null}

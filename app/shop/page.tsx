@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { DONATE_URL } from '../../lib/site';
+import { useDialogFocus } from '../../lib/use-dialog-focus';
 
 type Product = {
   id: string;
@@ -21,6 +22,7 @@ export default function ShopPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [category, setCategory] = useState('all');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const productDialogRef = useDialogFocus(selectedProduct !== null, () => setSelectedProduct(null));
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -143,6 +145,8 @@ export default function ShopPage() {
       {selectedProduct && (
         <div
           className="modal-backdrop"
+          ref={productDialogRef}
+          tabIndex={-1}
           role="dialog"
           aria-modal="true"
           aria-label={selectedProduct.name}

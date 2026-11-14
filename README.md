@@ -76,33 +76,40 @@ Chat messages are encrypted in the browser with a shared room key derived from `
 
 Archive images are stored outside `public/` and streamed by an authenticated API route; do not make those assets public or expose them through a separate CDN origin.
 
+Event RSVP records are idempotent and keyed by role. Since member and admin accounts use shared passwords, RSVPs do not identify individual attendees and must not be treated as an attendee roster.
+
+Calendar exports intentionally use all-day dates in `America/Denver`; event times remain visible on the site but are not included in exported calendar entries.
+
 ## Tests
 
 ```bash
-npm test                      # unit tests (vitest)
-MEMBER_PASSWORD=… ADMIN_PASSWORD=… npm run test:e2e         # Playwright
-MEMBER_PASSWORD=… npm run test:a11y                        # axe-core checks
-npm run test:responsive                                    # layout checks
+npm test                    # unit tests (vitest)
+npm run test:e2e            # Playwright; login-flow tests need configured passwords and Firebase
+npm run test:a11y           # axe-core checks, including protected pages with test-only auth
+npm run test:responsive     # layout checks
 ```
 
-The Playwright config builds and starts the app automatically.
+The Playwright config builds and starts the app automatically. CI uses a test-only signing secret and signed test cookies for protected routes; no production credentials are required.
 
 ## Deployment
 
-The app requires a Node.js/Next.js server runtime (Node.js 22 or newer); it is not configured for static export. GitHub Actions verifies pull requests and pushes to `main`, but does not deploy. AWS Amplify Hosting and the Porkbun-managed domain still require account-owner setup. See the [deployment runbook](docs/deployment-runbook.md) for Amplify compatibility, environment-variable risks, DNS setup, verification, and rollback.
+The app requires a Node.js/Next.js server runtime (Node.js 22 or newer); it is not configured for static export. GitHub Actions runs lint, type-check, unit tests, production build, Playwright, and protected-page accessibility checks for pull requests and pushes to `main`, but does not deploy. The intended host is Apify, but the checked-in `amplify.yml` and [deployment runbook](docs/deployment-runbook.md) describe AWS Amplify; `APIFY_API_TOKEN` is not hosting configuration. Resolve this mismatch and verify the host supports the required runtime before deployment. Porkbun DNS setup must wait until the selected host provides its exact records.
 
 ## Follow-up TODOs
 
-These are remaining code-review items, not claims about completed work. Production account setup and migration limitations are tracked in the [deployment runbook](docs/deployment-runbook.md).
+The code-review items previously listed here have been implemented. Complete these account-owner and deployment tasks in order:
+
+1. **Confirm the hosting architecture.** Apify is the intended host, but no Apify deployment configuration exists in this repository; the checked-in Amplify build spec and runbook are AWS Amplify-specific. Verify that the chosen Apify service can run this Next.js SSR app, API routes, middleware, and Node.js 22, and can supply server-only secrets at runtime. If not, select a compatible host. Update the deployment configuration and runbook to match before connecting production traffic.
+2. **Provision member and admin sign-in.** Set distinct, strong `MEMBER_PASSWORD` and `ADMIN_PASSWORD` values and a high-entropy `AUTH_SECRET` in the host's server-side secret store; never use `NEXT_PUBLIC_*` variables or expose secrets in preview builds, logs, or downloadable artifacts. Confirm the shared-password-per-role model is acceptable: it does not identify individual members or admins. Test anonymous redirects, member access without admin access, admin access, logout, session expiration/revocation, secure role-separated cookies, and login rate limits before launch.
+3. **Prepare Firebase.** With the Firebase owner, confirm the production project, Firestore, and Storage are enabled. Provide the server-side Firebase Admin project ID, service-account email/private key, and bucket name with least-privilege IAM access. Configure TTL for `internal_login_rate_limits.expiresAt`, validate trusted proxy address handling, and test required API reads/writes using non-production data. Firebase Admin bypasses client Security Rules, so do not broaden service-account permissions to work around failures.
+4. **Review stored media and API behavior.** Inventory existing Storage objects and public access; back up and approve any migration before changing production objects. Verify new uploads remain private and authenticated media routes work for intended roles. Product cleanup cannot be atomic across Storage and Firestore: if Storage deletion succeeds but a Firestore write fails, the API reports the partial state and metadata may need manual repair. Define an owner-visible recovery procedure for that case.
+5. **Configure optional integrations only when enabled.** Set `MISTRAL_API_KEY` as a server-only secret only if enabling `/ai-chat`; retain the disclosure that submitted text is sent to Mistral in plaintext and is not end-to-end encrypted. `APIFY_API_TOKEN` is unused by the current app; configure it only if an Apify-backed feature is implemented.
+6. **Gate production deploys.** Require the CI checks before merging to the production branch. Keep production credentials out of untrusted pull-request previews. Deploy first to the host's default URL and verify Node.js 22, server-side secret access, protected pages, APIs, Firebase, and private media before attaching the custom domain.
+7. **Configure Porkbun after the host is verified.** Inspect and save the current DNS zone first. Use only the exact domain-validation and routing records supplied by the selected host; do not guess record values or change nameservers. Preserve MX, mail-related TXT, and unrelated verification records. Verify DNS, TLS, HTTPS redirects, and apex/`www` canonical behavior after propagation.
+8. **Record go-live and rollback checks.** Confirm member/admin access boundaries, protected API behavior, Firebase operations, media privacy, domain routing, and absence of secrets in browser bundles/logs. Document the last-known-good deployment and rollback steps before announcing the site.
 
 Post images are uploaded as part of post creation and stored under a server-generated, post-specific path. Legacy images in the former shared `posts/` folder are retained on post deletion to avoid deleting an unrelated upload; clean those up separately if needed.
 
-- [ ] **Medium — Bound event RSVP records.** Validate RSVP status and replace the timestamp-unique array entries with a bounded, idempotent representation. See [RSVP handling](./app/api/events/[id]/rsvp/route.ts).
-- [ ] **Medium — Apply gallery filters before limiting.** Filter in Firestore or paginate matching results so older archive/community assets do not disappear as collections grow. See [gallery API](./app/api/gallery/route.ts).
-- [ ] **Medium — Make uploaded archive PDFs accessible.** The upload flow accepts PDFs, but the archive renders every item as an image and the Storage route downloads PDFs as attachments. Add a download/viewer link and test it. See [archive page](./app/archive/page.tsx), [admin uploads](./app/admin/page.tsx), and [Storage route](./app/api/storage/route.ts).
-- [ ] **Medium — Preserve event times in calendar exports.** ICS and Google Calendar exports currently produce all-day events despite the event time field. Include a validated time and timezone, or label events as all-day. See [calendar page](./app/calendar/page.tsx) and [ICS formatter](./lib/calendar-ics.ts).
-- [ ] **Medium — Compare upcoming events in the site timezone.** UTC date comparison can omit later-today events in Denver. Add a timezone-boundary test. See [calendar page](./app/calendar/page.tsx).
-- [ ] **Medium — Make reply creation and count updates atomic.** Verify the parent post and commit the reply/count update together to avoid orphan replies on failure or concurrent deletion. See [replies API](./app/api/posts/[id]/replies/route.ts).
-- [ ] **Medium — Manage dialog keyboard focus.** Move and contain focus, support Escape, and restore focus when calendar/product dialogs close; add keyboard tests. See [calendar dialog](./app/calendar/page.tsx) and [product dialog](./app/shop/page.tsx).
-- [ ] **Medium — Run E2E and protected-page accessibility checks in CI.** Add a safe test-auth setup and run the relevant Playwright checks so protected flows are covered without production credentials. See [CI workflow](./.github/workflows/ci.yml) and [accessibility tests](./tests/e2e/accessibility.spec.ts).
-- [ ] **Medium — Clean up product images.** Persist Storage paths and delete replaced/deleted product files. See [admin product flow](./app/admin/page.tsx) and [product API](./app/api/products/[id]/route.ts).
+Legacy RSVP arrays are normalized the next time an event receives an RSVP. Product image cleanup applies to stored product paths and legacy `/api/storage` URLs; unrelated external image URLs are not deleted.
+
+Product image cleanup runs before product metadata changes because Firebase Storage and Firestore do not share a transaction. If Storage cleanup fails, the metadata change is not made; if the subsequent Firestore write fails, the API reports that the old image was already removed and metadata may need manual repair.

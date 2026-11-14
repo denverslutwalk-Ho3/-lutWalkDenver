@@ -170,6 +170,106 @@ test.describe('Session role and revocation checks', () => {
     await expect(page).toHaveURL(/\/login\?next=%2Fbulletin/);
   });
 
+  test('archive PDFs are offered as downloads instead of rendered as images', async ({ page }) => {
+    await page.route('**/api/gallery**', (route) => route.fulfill({
+      json: {
+        assets: [{
+          id: 'pdf-1',
+          title: 'Workshop zine',
+          category: 'zines',
+          contentType: 'application/pdf',
+          storagePath: 'archive/zines/workshop.pdf',
+          imageUrl: '/api/storage?path=archive%2Fzines%2Fworkshop.pdf',
+        }],
+      },
+    }));
+    await page.goto('/');
+    await page.context().addCookies([{
+      name: 'sw_auth',
+      value: createSessionToken('member'),
+      url: new URL(page.url()).origin,
+      httpOnly: true,
+      sameSite: 'Lax',
+    }]);
+
+    await page.goto('/archive');
+    await expect(page.getByRole('link', { name: 'Download PDF: Workshop zine' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Workshop zine' })).toHaveCount(0);
+  });
+
+  test('calendar dialog traps focus, closes with Escape, and restores focus', async ({ page }) => {
+    const eventDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await page.route('**/api/events**', (route) => route.fulfill({
+      json: {
+        events: [{
+          id: 'meeting-1',
+          title: 'Community workshop',
+          date: eventDate,
+          time: '5:00 PM',
+          location: 'Denver',
+          description: 'Bring ideas',
+        }],
+      },
+    }));
+    await page.goto('/');
+    await page.context().addCookies([{
+      name: 'sw_auth',
+      value: createSessionToken('member'),
+      url: new URL(page.url()).origin,
+      httpOnly: true,
+      sameSite: 'Lax',
+    }]);
+    await page.goto('/calendar');
+
+    const trigger = page.getByRole('heading', { name: 'Community workshop' })
+      .getByRole('button', { name: 'Community workshop' });
+    await trigger.click();
+    const dialog = page.getByRole('dialog', { name: 'Community workshop' });
+    const closeButton = dialog.getByRole('button', { name: 'Close event details' });
+    await expect(closeButton).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(dialog.getByRole('link', { name: 'Google Calendar' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  });
+
+  test('product dialog closes with Escape and restores focus', async ({ page }) => {
+    await page.route('**/api/products**', (route) => route.fulfill({
+      json: {
+        products: [{
+          id: 'shirt-1',
+          name: 'Community shirt',
+          description: 'A cotton shirt',
+          price: 2000,
+          imageUrl: '',
+          category: 'apparel',
+          stock: 5,
+        }],
+      },
+    }));
+    await page.goto('/');
+    await page.context().addCookies([{
+      name: 'sw_auth',
+      value: createSessionToken('member'),
+      url: new URL(page.url()).origin,
+      httpOnly: true,
+      sameSite: 'Lax',
+    }]);
+    await page.goto('/shop');
+
+    const trigger = page.getByRole('button', { name: 'Community shirt' });
+    await trigger.click();
+    const dialog = page.getByRole('dialog', { name: 'Community shirt' });
+    const closeButton = dialog.getByRole('button', { name: 'Close product details' });
+    await expect(closeButton).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(closeButton).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  });
+
   test('archive media is served only to signed-in members', async ({ page }) => {
     await page.goto('/');
     await page.context().addCookies([{
