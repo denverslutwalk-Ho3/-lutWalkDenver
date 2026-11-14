@@ -135,6 +135,27 @@ test.describe('Session role and revocation checks', () => {
     await expect(page.getByRole('heading', { name: /Manage the community hub/i })).toBeVisible();
   });
 
+  test('member cannot choose a post image path or URL', async ({ page }) => {
+    await page.goto('/');
+    await page.context().addCookies([{
+      name: 'sw_auth',
+      value: createSessionToken('member'),
+      url: new URL(page.url()).origin,
+      httpOnly: true,
+      sameSite: 'Lax',
+    }]);
+
+    for (const imageFields of [
+      { storagePath: 'products/1700000000000-unrelated.png' },
+      { imageUrl: '/api/storage?path=posts/another-post/1700000000000-image.png' },
+    ]) {
+      const response = await page.request.post('/api/posts', {
+        data: { title: 'Test post', text: 'Test body', ...imageFields },
+      });
+      expect(response.status()).toBe(400);
+    }
+  });
+
   test('old member sessions are rejected after password rotation', async ({ page }) => {
     await page.goto('/');
     await page.context().addCookies([{

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAdminDb } from '../../../../lib/firebase-admin';
 import { requireAdmin } from '../../../../lib/authz';
 import { deleteStorageObject } from '../../../../lib/storage-cleanup';
+import { isPostStoragePath } from '../../../../lib/post-storage';
 
 export async function DELETE(
   _request: Request,
@@ -14,7 +15,10 @@ export async function DELETE(
   try {
     const db = getAdminDb();
     const postDoc = await db.collection('posts').doc(id).get();
-    await deleteStorageObject(postDoc.data()?.storagePath);
+    const storagePath = postDoc.data()?.storagePath;
+    if (isPostStoragePath(storagePath, id)) {
+      await deleteStorageObject(storagePath);
+    }
     // Firestore does not cascade subcollections; remove replies with their post.
     const replies = await db.collection('posts').doc(id).collection('replies').listDocuments();
     await Promise.all(replies.map((reply) => reply.delete()));

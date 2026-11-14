@@ -90,3 +90,19 @@ The Playwright config builds and starts the app automatically.
 ## Deployment
 
 The app requires a Node.js/Next.js server runtime (Node.js 22 or newer); it is not configured for static export. GitHub Actions verifies pull requests and pushes to `main`, but does not deploy. AWS Amplify Hosting and the Porkbun-managed domain still require account-owner setup. See the [deployment runbook](docs/deployment-runbook.md) for Amplify compatibility, environment-variable risks, DNS setup, verification, and rollback.
+
+## Follow-up TODOs
+
+These are remaining code-review items, not claims about completed work. Production account setup and migration limitations are tracked in the [deployment runbook](docs/deployment-runbook.md).
+
+Post images are uploaded as part of post creation and stored under a server-generated, post-specific path. Legacy images in the former shared `posts/` folder are retained on post deletion to avoid deleting an unrelated upload; clean those up separately if needed.
+
+- [ ] **Medium — Bound event RSVP records.** Validate RSVP status and replace the timestamp-unique array entries with a bounded, idempotent representation. See [RSVP handling](./app/api/events/[id]/rsvp/route.ts).
+- [ ] **Medium — Apply gallery filters before limiting.** Filter in Firestore or paginate matching results so older archive/community assets do not disappear as collections grow. See [gallery API](./app/api/gallery/route.ts).
+- [ ] **Medium — Make uploaded archive PDFs accessible.** The upload flow accepts PDFs, but the archive renders every item as an image and the Storage route downloads PDFs as attachments. Add a download/viewer link and test it. See [archive page](./app/archive/page.tsx), [admin uploads](./app/admin/page.tsx), and [Storage route](./app/api/storage/route.ts).
+- [ ] **Medium — Preserve event times in calendar exports.** ICS and Google Calendar exports currently produce all-day events despite the event time field. Include a validated time and timezone, or label events as all-day. See [calendar page](./app/calendar/page.tsx) and [ICS formatter](./lib/calendar-ics.ts).
+- [ ] **Medium — Compare upcoming events in the site timezone.** UTC date comparison can omit later-today events in Denver. Add a timezone-boundary test. See [calendar page](./app/calendar/page.tsx).
+- [ ] **Medium — Make reply creation and count updates atomic.** Verify the parent post and commit the reply/count update together to avoid orphan replies on failure or concurrent deletion. See [replies API](./app/api/posts/[id]/replies/route.ts).
+- [ ] **Medium — Manage dialog keyboard focus.** Move and contain focus, support Escape, and restore focus when calendar/product dialogs close; add keyboard tests. See [calendar dialog](./app/calendar/page.tsx) and [product dialog](./app/shop/page.tsx).
+- [ ] **Medium — Run E2E and protected-page accessibility checks in CI.** Add a safe test-auth setup and run the relevant Playwright checks so protected flows are covered without production credentials. See [CI workflow](./.github/workflows/ci.yml) and [accessibility tests](./tests/e2e/accessibility.spec.ts).
+- [ ] **Medium — Clean up product images.** Persist Storage paths and delete replaced/deleted product files. See [admin product flow](./app/admin/page.tsx) and [product API](./app/api/products/[id]/route.ts).

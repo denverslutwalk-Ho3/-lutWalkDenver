@@ -2,19 +2,9 @@ import { NextResponse } from 'next/server';
 import { getAdminStorage } from '../../../lib/firebase-admin';
 import { getServerSession } from '../../../lib/authz';
 import { readBodyWithinLimit } from '../../../lib/bounded-body';
+import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_FILE_SIZE, MAX_UPLOAD_REQUEST_SIZE } from '../../../lib/upload-constraints';
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
-// Allowance for multipart boundaries and form fields around the file itself.
-const MAX_UPLOAD_OVERHEAD = 1024 * 1024;
-const MAX_REQUEST_SIZE = MAX_FILE_SIZE + MAX_UPLOAD_OVERHEAD;
-const ALLOWED_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'application/pdf',
-]);
-const ALLOWED_FOLDERS = new Set(['archive', 'bulletin', 'community', 'posts', 'products']);
+const ALLOWED_FOLDERS = new Set(['archive', 'bulletin', 'community', 'products']);
 const ADMIN_ONLY_FOLDERS = new Set(['archive', 'community', 'products']);
 
 export async function POST(request: Request) {
@@ -26,11 +16,11 @@ export async function POST(request: Request) {
   try {
     // Reject oversized uploads before parsing the body into formData.
     const contentLength = Number(request.headers.get('content-length') ?? '0');
-    if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_SIZE) {
+    if (Number.isFinite(contentLength) && contentLength > MAX_UPLOAD_REQUEST_SIZE) {
       return NextResponse.json({ error: 'File exceeds 10 MB limit' }, { status: 413 });
     }
 
-    const body = await readBodyWithinLimit(request.body, MAX_REQUEST_SIZE);
+    const body = await readBodyWithinLimit(request.body, MAX_UPLOAD_REQUEST_SIZE);
     if (!body) {
       return NextResponse.json({ error: 'File exceeds 10 MB limit' }, { status: 413 });
     }
@@ -48,11 +38,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'file field is required' }, { status: 400 });
     }
 
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > MAX_UPLOAD_FILE_SIZE) {
       return NextResponse.json({ error: 'File exceeds 10 MB limit' }, { status: 413 });
     }
 
-    if (!ALLOWED_TYPES.has(file.type)) {
+    if (!ALLOWED_UPLOAD_TYPES.has(file.type)) {
       return NextResponse.json({ error: 'Unsupported file type' }, { status: 415 });
     }
 
