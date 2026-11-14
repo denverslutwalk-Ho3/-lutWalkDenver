@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { verifyToken } from './auth';
+import { adminPasswordVersion, memberPasswordVersion } from './session-version';
 
 export type SessionRole = 'member' | 'admin';
 export type Session = { role: SessionRole; claims: Record<string, unknown> } | null;
@@ -8,6 +9,10 @@ function tokenHasRole(token: string | undefined, role: SessionRole) {
   if (!token) return null;
   const claims = verifyToken(token);
   if (!claims || claims.sub !== role) return null;
+  // Reject sessions issued under a previous password so rotating the shared
+  // password revokes them.
+  const expectedVersion = role === 'admin' ? adminPasswordVersion() : memberPasswordVersion();
+  if (claims.pv !== expectedVersion) return null;
   return { role, claims };
 }
 
