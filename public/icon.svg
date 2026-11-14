@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SlutWalk Denver">
+  <rect width="512" height="512" rx="96" fill="#0e0b0d"/>
+  <circle cx="256" cy="256" r="196" fill="#4a0e24" stroke="#a3125a" stroke-width="24"/>
+  <text x="256" y="232" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="188" font-weight="700" fill="#f6eee1">$</text>
+  <text x="256" y="330" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="44" font-weight="700" letter-spacing="6" fill="#d4af5a">DENVER</text>
+</svg>

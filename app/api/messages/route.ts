@@ -15,13 +15,14 @@ export async function GET(request: Request) {
 
   try {
     const db = getAdminDb();
+    // Newest N messages, returned oldest-first for display.
     const snap = await db
       .collection('messages')
-      .orderBy('createdAt', 'asc')
+      .orderBy('createdAt', 'desc')
       .limit(limitN)
       .get();
 
-    const messages = snap.docs.map((doc: QueryDocumentSnapshot) => {
+    const messages = [...snap.docs].reverse().map((doc: QueryDocumentSnapshot) => {
       const d = doc.data();
       const ts = d.createdAt;
       const time =
@@ -56,6 +57,9 @@ export async function POST(request: Request) {
 
     if (!text) {
       return NextResponse.json({ error: 'text is required' }, { status: 400 });
+    }
+    if (text.length > 4000) {
+      return NextResponse.json({ error: 'Message is too long (4000 characters max)' }, { status: 400 });
     }
 
     const db = getAdminDb();

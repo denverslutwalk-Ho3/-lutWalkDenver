@@ -35,6 +35,9 @@ export async function POST(
     const text = typeof body.text === 'string' ? body.text.trim() : '';
     const sender = typeof body.sender === 'string' ? body.sender.trim() || 'Member' : 'Member';
     if (!text) return NextResponse.json({ error: 'text is required' }, { status: 400 });
+    if (text.length > 4000) {
+      return NextResponse.json({ error: 'Reply is too long (4000 characters max)' }, { status: 400 });
+    }
     const db = getAdminDb();
     const ref = await db.collection('posts').doc(id).collection('replies').add({
       text, sender, createdAt: FieldValue.serverTimestamp(),

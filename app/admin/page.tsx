@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import Image from 'next/image';
 import { useEffect, useState, useCallback } from 'react';
 import type { FormEvent, ChangeEvent } from 'react';
@@ -77,6 +76,7 @@ export default function AdminDashboardPage() {
   const [prodStock, setProdStock] = useState('');
   const [prodImageFile, setProdImageFile] = useState<File | null>(null);
   const [prodStatus, setProdStatus] = useState('');
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
   // Archive upload
   const [archiveFile, setArchiveFile] = useState<File | null>(null);
@@ -126,19 +126,28 @@ export default function AdminDashboardPage() {
   // ── Moderation ───────────────────────────────────────────────────────────
 
   const deletePost = async (id: string) => {
+    if (!window.confirm('Delete this post and its replies? This cannot be undone.')) return;
+    const response = await fetch(`/api/posts/${id}`, { method: 'DELETE', credentials: 'include' });
+    if (!response.ok) {
+      void loadData();
+      return;
+    }
     setPosts((prev) => prev.filter((p) => p.id !== id));
-    await fetch(`/api/posts/${id}`, { method: 'DELETE', credentials: 'include' });
   };
 
   const togglePin = async (post: Post) => {
     const pinned = !post.pinned;
-    setPosts((prev) => prev.map((p) => p.id === post.id ? { ...p, pinned } : p));
-    await fetch(`/api/posts/${post.id}`, {
+    const response = await fetch(`/api/posts/${post.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ pinned }),
     });
+    if (!response.ok) {
+      void loadData();
+      return;
+    }
+    setPosts((prev) => prev.map((p) => p.id === post.id ? { ...p, pinned } : p));
   };
 
   // ── Events ───────────────────────────────────────────────────────────────
@@ -168,8 +177,12 @@ export default function AdminDashboardPage() {
   };
 
   const deleteEvent = async (id: string) => {
+    const response = await fetch(`/api/events/${id}`, { method: 'DELETE', credentials: 'include' });
+    if (!response.ok) {
+      void loadData();
+      return;
+    }
     setEvents((prev) => prev.filter((e) => e.id !== id));
-    await fetch(`/api/events/${id}`, { method: 'DELETE', credentials: 'include' });
   };
 
   // ── Products ─────────────────────────────────────────────────────────────
@@ -184,37 +197,69 @@ export default function AdminDashboardPage() {
     return json.url ?? '';
   };
 
-  const createProduct = async (e: FormEvent) => {
+  const resetProductForm = () => {
+    setProdName(''); setProdDesc(''); setProdPrice(''); setProdStock('');
+    setProdImageFile(null); setEditingProductId(null); setProdStatus('');
+  };
+
+  const startEditProduct = (product: Product) => {
+    setEditingProductId(product.id);
+    setProdName(product.name);
+    setProdDesc(product.description);
+    setProdPrice((product.price / 100).toFixed(2));
+    setProdCategory(product.category);
+    setProdStock(String(product.stock));
+    setProdImageFile(null);
+    setProdStatus('Editing product. Save to update it.');
+  };
+
+  const saveProduct = async (e: FormEvent) => {
     e.preventDefault();
     setProdStatus('Saving…');
     let imageUrl = '';
-    if (prodImageFile) imageUrl = await uploadProductImage(prodImageFile);
+    if (prodImageFile) {
+      imageUrl = await uploadProductImage(prodImageFile);
+      if (!imageUrl) {
+        setProdStatus('The image could not be uploaded. Try again or save without it.');
+        return;
+      }
+    }
 
-    const res = await fetch('/api/products', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        name: prodName,
-        description: prodDesc,
-        price: Math.round(parseFloat(prodPrice) * 100),
-        imageUrl,
-        category: prodCategory,
-        stock: parseInt(prodStock, 10) || 0,
-      }),
-    });
+    const payload: Record<string, unknown> = {
+      name: prodName,
+      description: prodDesc,
+      price: Math.round(parseFloat(prodPrice) * 100) || 0,
+      category: prodCategory,
+      stock: parseInt(prodStock, 10) || 0,
+    };
+    if (imageUrl) payload.imageUrl = imageUrl;
+
+    const res = await fetch(
+      editingProductId ? `/api/products/${editingProductId}` : '/api/products',
+      {
+        method: editingProductId ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      },
+    );
+
     if (res.ok) {
-      setProdStatus('Product created');
-      setProdName(''); setProdDesc(''); setProdPrice(''); setProdStock(''); setProdImageFile(null);
+      setProdStatus(editingProductId ? 'Product updated' : 'Product created');
+      resetProductForm();
       void loadData();
     } else {
-      setProdStatus('Error creating product');
+      setProdStatus(editingProductId ? 'Error updating product' : 'Error creating product');
     }
   };
 
   const deleteProduct = async (id: string) => {
+    const response = await fetch(`/api/products/${id}`, { method: 'DELETE', credentials: 'include' });
+    if (!response.ok) {
+      void loadData();
+      return;
+    }
     setProducts((prev) => prev.filter((p) => p.id !== id));
-    await fetch(`/api/products/${id}`, { method: 'DELETE', credentials: 'include' });
   };
 
   // ── Archive ───────────────────────────────────────────────────────────────
@@ -267,8 +312,12 @@ export default function AdminDashboardPage() {
   };
 
   const deleteGalleryAsset = async (id: string) => {
+    const response = await fetch(`/api/gallery/${id}`, { method: 'DELETE', credentials: 'include' });
+    if (!response.ok) {
+      void loadData();
+      return;
+    }
     setGalleryAssets((prev) => prev.filter((asset) => asset.id !== id));
-    await fetch(`/api/gallery/${id}`, { method: 'DELETE', credentials: 'include' });
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -283,23 +332,13 @@ export default function AdminDashboardPage() {
 
   return (
     <main className="shell">
-      <header className="hero">
-        <nav>
-          <div className="logo">$lutWalk Denver</div>
-          <ul>
-            <li><Link href="/">Home</Link></li>
-            <li><Link href="/bulletin">Bulletin</Link></li>
-            <li><Link href="/calendar">Calendar</Link></li>
-            <li><Link href="/shop">Store</Link></li>
-            <li><Link href="/admin-login">Admin Login</Link></li>
-          </ul>
-        </nav>
+      <section className="hero" aria-labelledby="admin-title">
         <div className="hero-overlay">
           <p className="eyebrow">Administrator dashboard</p>
-          <h1>Manage the community hub.</h1>
+          <h1 id="admin-title">Manage the community hub.</h1>
           <p>Moderate content, manage events, products, and archive uploads.</p>
         </div>
-      </header>
+      </section>
 
       {/* Tab navigation */}
       <nav aria-label="Admin sections" className="admin-tabs">
@@ -359,7 +398,7 @@ export default function AdminDashboardPage() {
                       className="btn btn-secondary"
                       onClick={() => void togglePin(post)}
                     >
-                      {post.pinned ? 'Edit pin' : 'Add pin'}
+                      {post.pinned ? 'Unpin' : 'Pin'}
                     </button>
                     <button
                       type="button"
@@ -435,8 +474,8 @@ export default function AdminDashboardPage() {
         {activeTab === 'products' && (
           <>
             <h2>Store management controls</h2>
-            <form className="admin-form" onSubmit={(e) => void createProduct(e)}>
-              <h3>Add product</h3>
+            <form className="admin-form" onSubmit={(e) => void saveProduct(e)}>
+              <h3>{editingProductId ? 'Edit product' : 'Add product'}</h3>
               <label htmlFor="prod-name">Product name</label>
               <input id="prod-name" type="text" value={prodName} onChange={(e) => setProdName(e.target.value)} required />
 
@@ -464,7 +503,14 @@ export default function AdminDashboardPage() {
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setProdImageFile(e.target.files?.[0] ?? null)}
               />
 
-              <button type="submit" className="btn">Add product</button>
+              <button type="submit" className="btn">
+                {editingProductId ? 'Save changes' : 'Add product'}
+              </button>
+              {editingProductId && (
+                <button type="button" className="btn btn-secondary" onClick={resetProductForm}>
+                  Cancel edit
+                </button>
+              )}
               {prodStatus && <p className="helper">{prodStatus}</p>}
             </form>
 
@@ -490,6 +536,7 @@ export default function AdminDashboardPage() {
                     <button
                       type="button"
                       className="btn btn-secondary"
+                      onClick={() => startEditProduct(prod)}
                     >
                       Edit
                     </button>
@@ -588,12 +635,6 @@ export default function AdminDashboardPage() {
                     <a href={asset.imageUrl} target="_blank" rel="noopener noreferrer">{asset.imageUrl}</a>
                   ) : null}
                   <div className="admin-list-actions">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                    >
-                      Edit
-                    </button>
                     <button
                       type="button"
                       className="btn btn-danger"

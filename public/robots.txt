@@ -1,13 +1,19 @@
 User-agent: *
 Allow: /
 
-# Disallow sensitive areas
+# Member and organizer areas are private; keep them out of search results.
 Disallow: /admin
 Disallow: /admin-login
 Disallow: /api/
+Disallow: /archive
+Disallow: /bulletin
+Disallow: /calendar
+Disallow: /care
+Disallow: /chat
+Disallow: /community
+Disallow: /education
+Disallow: /organizing
+Disallow: /shop
+Disallow: /zines
 
-# Sitemap
 Sitemap: https://slutwalkdenver.gay/sitemap.xml
-
-# Crawl delay
-Crawl-delay: 5

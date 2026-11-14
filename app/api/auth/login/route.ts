@@ -1,24 +1,25 @@
 import { NextResponse } from 'next/server';
 
 import { signToken } from '../../../../lib/auth';
-import { getMemberPassword } from '../../../../lib/passwords';
+import { isMemberLoginConfigured, verifyMemberPassword } from '../../../../lib/passwords';
 
+// SameSite=Lax on the session cookie already blocks cross-site form/fetch
+// POSTs from carrying credentials, so no separate Origin comparison is needed
+// here — and an Origin check breaks deployments behind a reverse proxy.
 export async function POST(request: Request) {
-  // CSRF: reject cross-origin requests that supply an Origin header
-  const origin = request.headers.get('origin');
-  if (origin !== null && origin !== 'null') {
-    const expectedOrigin = new URL(request.url).origin;
-    if (origin !== expectedOrigin) {
-      return NextResponse.json({ ok: false }, { status: 403 });
-    }
+  if (!isMemberLoginConfigured()) {
+    return NextResponse.json(
+      { ok: false, message: 'Member access is not configured yet. Contact an organizer.' },
+      { status: 503 },
+    );
   }
 
   try {
-    const { password } = await request.json();
-    const memberPassword = getMemberPassword();
+    const body = await request.json() as { password?: unknown };
+    const password = typeof body.password === 'string' ? body.password : '';
 
-    if (!memberPassword || password.trim() !== memberPassword.trim()) {
-      return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    if (!verifyMemberPassword(password)) {
+      return NextResponse.json({ ok: false, message: 'Incorrect password' }, { status: 401 });
     }
 
     const token = signToken({ sub: 'member' });
@@ -45,6 +46,6 @@ export async function POST(request: Request) {
 
     return response;
   } catch {
-    return NextResponse.json({ ok: false }, { status: 500 });
+    return NextResponse.json({ ok: false }, { status: 400 });
   }
 }

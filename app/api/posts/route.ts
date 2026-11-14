@@ -44,6 +44,9 @@ export async function POST(request: Request) {
     if (!title || !text) {
       return NextResponse.json({ error: 'title and text are required' }, { status: 400 });
     }
+    if (title.length > 200 || text.length > 10000) {
+      return NextResponse.json({ error: 'Post is too long' }, { status: 400 });
+    }
 
     const db = getAdminDb();
     const ref = await db.collection('posts').add({

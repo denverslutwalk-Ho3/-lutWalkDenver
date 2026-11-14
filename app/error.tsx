@@ -9,28 +9,20 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
   }, [error]);
 
   return (
-    <html lang="en">
-      <body>
-        <main className="shell">
-          <section className="hero" aria-labelledby="error-title">
-            <div className="hero-overlay">
-              <p className="eyebrow">Error</p>
-              <h1 id="error-title">500 - Server Error</h1>
-              <p>
-                Something went wrong on our end. We&apos;re working to fix it!
-              </p>
-              <div className="btn-row">
-                <Link className="btn" href="/">
-                  Return to Homepage
-                </Link>
-                <button className="btn btn-secondary" onClick={() => reset()}>
-                  Try Again
-                </button>
-              </div>
-            </div>
-          </section>
-        </main>
-      </body>
-    </html>
+    <main className="shell">
+      <section className="hero" aria-labelledby="error-title">
+        <div className="hero-overlay">
+          <p className="eyebrow">Error</p>
+          <h1 id="error-title">Something went wrong.</h1>
+          <p>This page could not load. Try again, or go back to the home page.</p>
+          <div className="btn-row">
+            <button className="btn" type="button" onClick={() => reset()}>
+              Try again
+            </button>
+            <Link className="btn btn-secondary" href="/">Return home</Link>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }

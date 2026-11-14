@@ -32,8 +32,7 @@ This repository is already set up for that flow through the Next.js app, middlew
    - `AUTH_SECRET`
    - `MEMBER_PASSWORD`
    - `ADMIN_PASSWORD`
-   - Optional Firebase values if gallery/upload features are enabled
-   - `NEXT_PUBLIC_EEPSITE=false` unless you are deploying an I2P eepsite build
+   - Firebase Admin values if the bulletin, calendar, gallery, store, or uploads should work
 
 ### Production deployment
 
@@ -50,22 +49,19 @@ NODE_ENV=production
 AUTH_SECRET=replace-with-a-long-random-string
 MEMBER_PASSWORD=replace-with-member-password
 ADMIN_PASSWORD=replace-with-admin-password
-NEXT_PUBLIC_EEPSITE=false
 ```
 
-If Firebase features are enabled, also add:
+The three values above are required. There are no default passwords: if a
+password is unset, that role cannot sign in.
+
+For the bulletin, calendar, gallery, store, and uploads, also add the Firebase
+Admin service account:
 
 ```env
 FIREBASE_PROJECT_ID=...
 FIREBASE_CLIENT_EMAIL=...
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
-NEXT_PUBLIC_FIREBASE_API_KEY=...
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
-NEXT_PUBLIC_FIREBASE_APP_ID=...
-NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=...
 ```
 
 ## Server setup on Ubuntu
