@@ -118,41 +118,15 @@ export default function BulletinPage() {
     setPostError(false);
     setPostStatus('Posting…');
 
-    let imageUrl: string | null = null;
-    let storagePath: string | null = null;
-
-    if (imageFile) {
-      const formData = new FormData();
-      formData.append('file', imageFile);
-      formData.append('folder', 'posts');
-      try {
-        const upload = await fetch('/api/upload', { method: 'POST', credentials: 'include', body: formData });
-        if (!upload.ok) {
-          const data = await upload.json().catch(() => null) as { error?: string } | null;
-          setPostError(true);
-          setPostStatus(data?.error ?? 'The image could not be uploaded. Try posting without it.');
-          postedRef.current = false;
-          setPosting(false);
-          return;
-        }
-        const data = await upload.json() as { url?: string; path?: string };
-        imageUrl = data.url ?? null;
-        storagePath = data.path ?? null;
-      } catch {
-        setPostError(true);
-        setPostStatus('The image could not be uploaded. Try posting without it.');
-        postedRef.current = false;
-        setPosting(false);
-        return;
-      }
-    }
-
+    const formData = new FormData();
+    formData.append('title', cleanTitle);
+    formData.append('text', cleanText);
+    if (imageFile) formData.append('file', imageFile);
     try {
       const response = await fetch('/api/posts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ title: cleanTitle, text: cleanText, imageUrl, storagePath }),
+        body: formData,
       });
 
       if (!response.ok) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decryptText, encryptText } from './e2e-chat';
+import { decryptText, encryptText } from './chat-crypto';
 
 describe('e2e chat helpers', () => {
   it('encrypts and decrypts text with AES-GCM', async () => {

@@ -40,6 +40,7 @@ AWS references:
 - `/api/auth/login` issues the member `sw_auth` cookie; `/api/auth/admin-login` issues the separate admin `sw_admin` cookie.
 - Member sessions last 30 days; admin sessions last 8 hours. Both cookies are `HttpOnly`, `SameSite=Lax`, path `/`, and `Secure` in production.
 - Middleware checks the signed role claim. Member routes accept a member or admin claim; `/admin` requires the admin claim.
+- The archive page requires a signed member/admin session. Archive images are served by an authenticated API route from files outside `public/`.
 - API handlers also check authorization server-side; write routes for events, products, and gallery assets require admin authorization.
 - Login clears the other role's session cookie. Do not weaken middleware, change the cookie names, or disable `Secure`.
 
@@ -76,6 +77,8 @@ If passwords were pasted into chat or other shared systems, treat them as expose
 The repository contains no `firebase.json`, Firestore rules, or Storage rules to review or deploy. Firebase Admin uses service-account IAM and bypasses client Security Rules; do not broaden service-account permissions or weaken rules to make deployment work. Confirm the production project, enabled Firestore/Storage services, and least-privilege service-account access with the Firebase owner.
 
 Uploads no longer make objects public. `/api/upload` returns a same-origin `/api/storage` URL; the read route requires a signed-in session and serves files with private no-store caching. Upload authorization remains admin-only for archive, community, and product folders; signed-in members can read these assets as needed by the member pages. New uploads remain private only if the Firebase Storage bucket IAM policy does not grant public reads.
+
+Archive images live in `assets/community-media/archive/` and are included in the server route's output trace. They are not placed in `public/`; keep them on the authenticated server route and do not expose them through a separate static bucket or CDN origin.
 
 **Existing-object migration remains a production blocker:** previously uploaded files may still have public ACLs or public bucket access, and their direct URLs may already have been copied elsewhere. The Firebase owner must inspect the bucket policy and revoke public access for legacy objects as appropriate, then validate that private uploads and authorized reads work. Do not remove or rewrite production objects without an approved migration and backup.
 

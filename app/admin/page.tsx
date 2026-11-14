@@ -67,6 +67,7 @@ export default function AdminDashboardPage() {
   const [evtLocation, setEvtLocation] = useState('');
   const [evtDescription, setEvtDescription] = useState('');
   const [evtStatus, setEvtStatus] = useState('');
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
   // Product form
   const [prodName, setProdName] = useState('');
@@ -152,11 +153,31 @@ export default function AdminDashboardPage() {
 
   // ── Events ───────────────────────────────────────────────────────────────
 
-  const createEvent = async (e: FormEvent) => {
+  const resetEventForm = (status = '') => {
+    setEvtTitle('');
+    setEvtDate('');
+    setEvtTime('');
+    setEvtLocation('');
+    setEvtDescription('');
+    setEditingEventId(null);
+    setEvtStatus(status);
+  };
+
+  const startEditEvent = (event: AdminEvent) => {
+    setEditingEventId(event.id);
+    setEvtTitle(event.title);
+    setEvtDate(event.date);
+    setEvtTime(event.time);
+    setEvtLocation(event.location);
+    setEvtDescription(event.description);
+    setEvtStatus(`Editing "${event.title}". Save to update it.`);
+  };
+
+  const saveEvent = async (e: FormEvent) => {
     e.preventDefault();
     setEvtStatus('Saving…');
-    const res = await fetch('/api/events', {
-      method: 'POST',
+    const res = await fetch(editingEventId ? `/api/events/${editingEventId}` : '/api/events', {
+      method: editingEventId ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({
@@ -168,11 +189,10 @@ export default function AdminDashboardPage() {
       }),
     });
     if (res.ok) {
-      setEvtStatus('Event created');
-      setEvtTitle(''); setEvtDate(''); setEvtTime(''); setEvtLocation(''); setEvtDescription('');
+      resetEventForm(editingEventId ? 'Event updated' : 'Event created');
       void loadData();
     } else {
-      setEvtStatus('Error creating event');
+      setEvtStatus(editingEventId ? 'Error updating event' : 'Error creating event');
     }
   };
 
@@ -418,8 +438,8 @@ export default function AdminDashboardPage() {
         {activeTab === 'events' && (
           <>
             <h2>Event management controls</h2>
-            <form className="admin-form" onSubmit={(e) => void createEvent(e)}>
-              <h3>Add event</h3>
+            <form className="admin-form" onSubmit={(e) => void saveEvent(e)}>
+              <h3>{editingEventId ? 'Edit event' : 'Add event'}</h3>
               <label htmlFor="evt-title">Title</label>
               <input id="evt-title" type="text" value={evtTitle} onChange={(e) => setEvtTitle(e.target.value)} required />
 
@@ -435,7 +455,14 @@ export default function AdminDashboardPage() {
               <label htmlFor="evt-description">Description</label>
               <textarea id="evt-description" rows={4} value={evtDescription} onChange={(e) => setEvtDescription(e.target.value)} />
 
-              <button type="submit" className="btn">Add event</button>
+              <button type="submit" className="btn">
+                {editingEventId ? 'Save changes' : 'Add event'}
+              </button>
+              {editingEventId && (
+                <button type="button" className="btn btn-secondary" onClick={() => resetEventForm()}>
+                  Cancel editing
+                </button>
+              )}
               {evtStatus && <p className="helper">{evtStatus}</p>}
             </form>
 
@@ -452,6 +479,8 @@ export default function AdminDashboardPage() {
                     <button
                       type="button"
                       className="btn btn-secondary"
+                      onClick={() => startEditEvent(ev)}
+                      aria-label={`Edit ${ev.title}`}
                     >
                       Edit
                     </button>

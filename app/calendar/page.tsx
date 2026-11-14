@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { toIcs } from '../../lib/calendar-ics';
 
 type CalendarEvent = {
   id: string;
@@ -24,31 +25,6 @@ function buildCalendarGrid(year: number, month: number): (number | null)[] {
   const cells: (number | null)[] = Array.from({ length: firstDay }, () => null);
   for (let day = 1; day <= daysInMonth; day++) cells.push(day);
   return cells;
-}
-
-function escapeIcsText(value: string): string {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/;/g, '\\;')
-    .replace(/,/g, '\\,')
-    .replace(/\r?\n/g, '\\n');
-}
-
-function toIcs(event: CalendarEvent): string {
-  const dateStr = event.date.replace(/-/g, '');
-  return [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//SlutWalk Denver//EN',
-    'BEGIN:VEVENT',
-    `UID:${event.id.replace(/[\r\n]/g, '')}@slutwalkdenver`,
-    `DTSTART;VALUE=DATE:${dateStr}`,
-    `SUMMARY:${escapeIcsText(event.title)}`,
-    `DESCRIPTION:${escapeIcsText(event.description)}`,
-    `LOCATION:${escapeIcsText(event.location)}`,
-    'END:VEVENT',
-    'END:VCALENDAR',
-  ].join('\r\n');
 }
 
 function downloadIcs(event: CalendarEvent) {

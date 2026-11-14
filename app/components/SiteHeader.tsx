@@ -79,7 +79,7 @@ export default function SiteHeader() {
                   {item.label}
                 </Link>
               </li>
-            ))
+            ))}
           </ul>
         </nav>
 

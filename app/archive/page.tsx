@@ -14,13 +14,13 @@ type GalleryAsset = {
 const ARCHIVE_CATEGORIES: Array<GalleryAsset['category']> = ['photos', 'flyers', 'press', 'zines', 'general'];
 
 const COLLECTION: Array<{ src: string; alt: string; caption: string; category: string }> = [
-  { src: '/media/slutwalk-2021-1.jpg', alt: 'SlutWalk Denver 2021 gathering, page one', caption: 'SlutWalk Denver, 2021', category: 'photo' },
-  { src: '/media/slutwalk-2021-2.jpg', alt: 'SlutWalk Denver 2021 gathering, page two', caption: 'SlutWalk Denver, 2021', category: 'photo' },
-  { src: '/media/call-for-zines.jpg', alt: 'Call for zines flyer', caption: 'Call for zines', category: 'flyer' },
-  { src: '/media/how-to-submit.jpg', alt: 'How to submit a zine flyer', caption: 'How to submit', category: 'flyer' },
-  { src: '/media/who-wants-to-submit.jpg', alt: 'Who wants to submit flyer', caption: 'Who wants to submit?', category: 'flyer' },
-  { src: '/media/never-again-poster.jpg', alt: 'Never Again poster artwork', caption: 'Never Again', category: 'poster' },
-  { src: '/media/pocket-zine.png', alt: 'Pocket zine cover', caption: 'Pocket zine', category: 'zine' },
+  { src: '/api/archive-media/slutwalk-2021-1.jpg', alt: 'SlutWalk Denver 2021 gathering, page one', caption: 'SlutWalk Denver, 2021', category: 'photo' },
+  { src: '/api/archive-media/slutwalk-2021-2.jpg', alt: 'SlutWalk Denver 2021 gathering, page two', caption: 'SlutWalk Denver, 2021', category: 'photo' },
+  { src: '/api/archive-media/call-for-zines.jpg', alt: 'Call for zines flyer', caption: 'Call for zines', category: 'flyer' },
+  { src: '/api/archive-media/how-to-submit.jpg', alt: 'How to submit a zine flyer', caption: 'How to submit', category: 'flyer' },
+  { src: '/api/archive-media/who-wants-to-submit.jpg', alt: 'Who wants to submit flyer', caption: 'Who wants to submit?', category: 'flyer' },
+  { src: '/api/archive-media/never-again-poster.jpg', alt: 'Never Again poster artwork', caption: 'Never Again', category: 'poster' },
+  { src: '/api/archive-media/pocket-zine.png', alt: 'Pocket zine cover', caption: 'Pocket zine', category: 'zine' },
 ];
 
 export default function ArchivePage() {

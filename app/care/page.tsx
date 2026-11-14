@@ -28,8 +28,9 @@ export default function CarePage() {
           <article className="card">
             <h3>Talk with other members</h3>
             <p>
-              The member chat is a private space for support and coordination. Messages
-              are encrypted before they are stored.
+              The member chat is a shared space for support and coordination. Messages
+              are encrypted before storage, but the server and all signed-in members
+              can derive the shared key, so it is not end-to-end encrypted.
             </p>
             <Link className="btn btn-secondary" href="/chat">Open member chat</Link>
           </article>
@@ -48,7 +49,7 @@ export default function CarePage() {
         <h2 id="privacy-title">Privacy and confidentiality</h2>
         <ul className="plain-list">
           <li>Member pages are only visible after sign-in.</li>
-          <li>Chat messages are encrypted before they are stored.</li>
+          <li>Chat messages are encrypted before storage, but the shared key is available to the server and all signed-in members.</li>
           <li>Share someone else&apos;s story only with their consent.</li>
           <li>Use the bulletin to ask for help without sharing more than you want to.</li>
         </ul>

@@ -1,9 +1,9 @@
 import crypto from 'crypto';
 
 /**
- * All members share one encrypted room, so the room key is derived from the
- * server's AUTH_SECRET and handed only to authenticated members. Messages are
- * stored as ciphertext; the browser encrypts and decrypts them.
+ * The room key is derived from AUTH_SECRET and shared with authenticated
+ * members. This encrypts stored messages but is not end-to-end encryption:
+ * the server can derive the same key.
  */
 export function getChatRoomKey() {
   const secret = process.env.AUTH_SECRET;

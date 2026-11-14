@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { decryptText, encryptText, importKeyFromBase64 } from '../../lib/e2e-chat';
-import type { E2EEncryptedPayload } from '../../lib/e2e-chat';
+import { decryptText, encryptText, importKeyFromBase64 } from '../../lib/chat-crypto';
+import type { EncryptedChatPayload } from '../../lib/chat-crypto';
 
 type ChatMessage = {
   id: string;
@@ -37,7 +37,7 @@ export default function ChatPage() {
       const next: ChatMessage[] = [];
       for (const message of data.messages ?? []) {
         try {
-          const payload = JSON.parse(message.text) as E2EEncryptedPayload;
+          const payload = JSON.parse(message.text) as EncryptedChatPayload;
           const plaintext = await decryptText(payload, cryptoKey);
           next.push({ ...message, text: plaintext, readable: true });
         } catch {
@@ -129,9 +129,9 @@ export default function ChatPage() {
           <h1 id="chat-title">Private conversations for the community.</h1>
           <p>
             Messages are encrypted in your browser with a shared room key before
-            they are stored. The key is derived on the server and is available
-            to every signed-in member, so treat this space as community-shared
-            rather than private.
+            they are stored. The server derives the key, and every signed-in
+            member receives it. This is not end-to-end encryption: the site can
+            also derive the key, so do not use this chat for confidential messages.
           </p>
         </div>
       </section>
