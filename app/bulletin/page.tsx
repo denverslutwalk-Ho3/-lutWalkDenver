@@ -1,24 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import Image from 'next/image';
-import { useEffect, useRef, useState, useCallback, type ChangeEvent, type KeyboardEvent } from 'react';
-
-// ── Types ────────────────────────────────────────────────────────────────────
-
-type ChatMessage = {
-  id: string;
-  sender: string;
-  text: string;
-  sent?: boolean;
-  time: string;
-};
-
-type ThreadReply = {
-  id: string;
-  text: string;
-  time: string;
-};
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 
 type Thread = {
   id: string;
@@ -26,556 +10,394 @@ type Thread = {
   text: string;
   imageUrl?: string | null;
   pinned?: boolean;
-  reactions?: Record<string, number>;
   replyCount?: number;
-  createdAt: string;
-  replies?: ThreadReply[];
+  createdAt?: unknown;
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+type Reply = {
+  id: string;
+  text: string;
+  sender?: string;
+  createdAt?: unknown;
+};
 
-const REACTIONS = ['support', 'care', 'solidarity', 'share'];
+type Role = 'member' | 'admin' | null;
 
 function formatTimestamp(value: unknown): string {
-  // Handles serialized Firestore admin Timestamps ({ _seconds, _nanoseconds })
-  if (value != null && typeof value === 'object' && '_seconds' in value) {
+  if (value == null) return '';
+  // Firestore Timestamp serialized by the API as { _seconds, _nanoseconds }
+  if (typeof value === 'object' && '_seconds' in value) {
     return new Date((value as { _seconds: number })._seconds * 1000).toLocaleString();
   }
-  if (typeof value === 'string') return value;
-  return new Date().toLocaleString();
+  if (typeof value === 'string') return new Date(value).toLocaleString();
+  return '';
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
 export default function BulletinPage() {
-  const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: '0', sender: 'Moderator', text: 'Welcome! Introduce yourself and be respectful.', time: new Date().toLocaleString() },
-  ]);
-  const [threadTitle, setThreadTitle] = useState('');
-  const [threadText, setThreadText] = useState('');
-  const [threadImageFile, setThreadImageFile] = useState<File | null>(null);
-  const [threadImagePreview, setThreadImagePreview] = useState('');
-  const [threads, setThreads] = useState<Thread[]>([
-    {
-      id: '0',
-      title: 'Welcome to the community board',
-      text: 'Use this space for organizing, resources, event planning, and respectful discussion.',
-      createdAt: new Date().toLocaleString(),
-    },
-  ]);
-  const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
+  const [role, setRole] = useState<Role>(null);
+  const [posts, setPosts] = useState<Thread[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  const [title, setTitle] = useState('');
+  const [text, setText] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState('');
   const [posting, setPosting] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const chatWindowRef = useRef<HTMLDivElement>(null);
+  const [postStatus, setPostStatus] = useState('');
+  const [postError, setPostError] = useState(false);
 
-  // ── Detect admin session ──────────────────────────────────────────────────
-  useEffect(() => {
-    setIsAdmin(window.localStorage.getItem('slutwalk-admin-access') === 'true');
-  }, []);
+  const [openReplies, setOpenReplies] = useState<Record<string, Reply[]>>({});
+  const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
+  const [replyStatus, setReplyStatus] = useState<Record<string, string>>({});
+  const postedRef = useRef(false);
 
-  // ── Fetch messages and threads from the API ───────────────────────────────
-
-  const loadMessages = useCallback(async () => {
+  const loadRole = useCallback(async () => {
     try {
-      const res = await fetch('/api/messages', { credentials: 'include' });
-      if (res.ok) {
-        const json = await res.json() as { messages?: { id: string; sender: string; text: string; time: string }[] };
-        if (Array.isArray(json.messages) && json.messages.length > 0) {
-          setMessages(json.messages);
-        }
-      }
+      const response = await fetch('/api/auth/session', { credentials: 'include' });
+      if (!response.ok) return;
+      const data = await response.json() as { role?: Role };
+      setRole(data.role ?? null);
     } catch {
-      // Keep seed messages on failure
+      setRole(null);
     }
   }, []);
 
-  const loadThreads = useCallback(async () => {
+  const loadPosts = useCallback(async () => {
+    setLoadError('');
     try {
-      const res = await fetch('/api/posts', { credentials: 'include' });
-      if (res.ok) {
-        const json = await res.json() as { posts?: Record<string, unknown>[] };
-        if (Array.isArray(json.posts) && json.posts.length > 0) {
-          setThreads(
-            json.posts.map((d) => ({
-              id: typeof d.id === 'string' ? d.id : String(Date.now()),
-              title: typeof d.title === 'string' ? d.title : '',
-              text: typeof d.text === 'string' ? d.text : '',
-              imageUrl: typeof d.imageUrl === 'string' ? d.imageUrl : null,
-              pinned: d.pinned === true,
-              reactions:
-                typeof d.reactions === 'object' && d.reactions !== null
-                  ? (d.reactions as Record<string, number>)
-                  : {},
-              replyCount: typeof d.replyCount === 'number' ? d.replyCount : 0,
-              createdAt: formatTimestamp(d.createdAt),
-            })),
-          );
-        }
+      const response = await fetch('/api/posts?limit=50', { credentials: 'include' });
+      if (!response.ok) {
+        setLoadError('The bulletin could not be loaded. Try again in a moment.');
+        setPosts([]);
+        return;
       }
+      const data = await response.json() as { posts?: Thread[] };
+      setPosts(Array.isArray(data.posts) ? data.posts : []);
     } catch {
-      // Keep seed threads on failure
+      setLoadError('The bulletin could not be loaded. Check your connection and try again.');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  // ── Poll for updates (replaces Firestore onSnapshot) ──────────────────────
   useEffect(() => {
-    void loadMessages();
-    void loadThreads();
-
-    const msgInterval = setInterval(() => { void loadMessages(); }, 5_000);
-    const threadInterval = setInterval(() => { void loadThreads(); }, 15_000);
-
-    // Pause polling while the tab is hidden; resume immediately on becoming visible.
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        void loadMessages();
-        void loadThreads();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      clearInterval(msgInterval);
-      clearInterval(threadInterval);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [loadMessages, loadThreads]);
-
-  // ── Auto-scroll chat ──────────────────────────────────────────────────────
-  useEffect(() => {
-    const el = chatWindowRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages]);
-
-  // ── Chat ──────────────────────────────────────────────────────────────────
-
-  const sendChatMessage = async () => {
-    const text = chatInput.trim();
-    if (!text) return;
-
-    // Optimistic local update
-    const localMsg: ChatMessage = {
-      id: String(Date.now()),
-      sender: 'You',
-      text,
-      sent: true,
-      time: new Date().toLocaleString(),
-    };
-    setMessages((prev) => [...prev, localMsg]);
-    setChatInput('');
-
-    try {
-      await fetch('/api/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ text, sender: 'Member' }),
-      });
-      // Refresh so the message shows with its server-side ID and timestamp
-      await loadMessages();
-    } catch {
-      // Message already shown locally; silent failure
-    }
-  };
-
-  const handleSendKey = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      void sendChatMessage();
-    }
-  };
-
-  // ── Thread image preview ─────────────────────────────────────────────────
+    void loadRole();
+    void loadPosts();
+  }, [loadRole, loadPosts]);
 
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
-    setThreadImageFile(file);
+    setImageFile(file);
     if (!file) {
-      setThreadImagePreview('');
+      setImagePreview('');
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => setThreadImagePreview(reader.result as string);
+    reader.onload = () => setImagePreview(String(reader.result ?? ''));
     reader.readAsDataURL(file);
   };
 
-  // ── Post thread ───────────────────────────────────────────────────────────
+  const resetForm = () => {
+    setTitle('');
+    setText('');
+    setImageFile(null);
+    setImagePreview('');
+    postedRef.current = false;
+  };
 
-  const addThread = async () => {
-    const title = threadTitle.trim();
-    const text = threadText.trim();
-    if (!title || !text || posting) return;
+  const createPost = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const cleanTitle = title.trim();
+    const cleanText = text.trim();
+    if (!cleanTitle || !cleanText || posting || postedRef.current) return;
 
     setPosting(true);
+    postedRef.current = true;
+    setPostError(false);
+    setPostStatus('Posting…');
 
     let imageUrl: string | null = null;
 
-    // Upload image if one was chosen
-    if (threadImageFile) {
+    if (imageFile) {
       const formData = new FormData();
-      formData.append('file', threadImageFile);
+      formData.append('file', imageFile);
       formData.append('folder', 'posts');
-
       try {
-        const res = await fetch('/api/upload', { method: 'POST', credentials: 'include', body: formData });
-        if (res.ok) {
-          const json = await res.json() as { url?: string };
-          imageUrl = json.url ?? null;
+        const upload = await fetch('/api/upload', { method: 'POST', credentials: 'include', body: formData });
+        if (!upload.ok) {
+          const data = await upload.json().catch(() => null) as { error?: string } | null;
+          setPostError(true);
+          setPostStatus(data?.error ?? 'The image could not be uploaded. Try posting without it.');
+          postedRef.current = false;
+          setPosting(false);
+          return;
         }
+        const data = await upload.json() as { url?: string };
+        imageUrl = data.url ?? null;
       } catch {
-        // Non-fatal — post without image
+        setPostError(true);
+        setPostStatus('The image could not be uploaded. Try posting without it.');
+        postedRef.current = false;
+        setPosting(false);
+        return;
       }
     }
 
-    // Post to API
     try {
-      const res = await fetch('/api/posts', {
+      const response = await fetch('/api/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ title, text, imageUrl }),
+        body: JSON.stringify({ title: cleanTitle, text: cleanText, imageUrl }),
       });
 
-      if (res.ok) {
-        // Refresh thread list to include the new post
-        await loadThreads();
-      } else {
-        // Local fallback when the API is unavailable
-        setThreads((prev) => [
-          {
-            id: String(Date.now()),
-            title,
-            text,
-            imageUrl: threadImagePreview || null,
-            pinned: false,
-            reactions: {},
-            replyCount: 0,
-            createdAt: new Date().toLocaleString(),
-          },
-          ...prev,
-        ]);
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        setPostError(true);
+        setPostStatus(data?.error ?? 'Your post could not be saved. Try again.');
+        postedRef.current = false;
+        setPosting(false);
+        return;
       }
-    } catch {
-      // Local fallback
-      setThreads((prev) => [
-        {
-          id: String(Date.now()),
-          title,
-          text,
-          imageUrl: threadImagePreview || null,
-          createdAt: new Date().toLocaleString(),
-        },
-        ...prev,
-      ]);
-    }
 
-    setThreadTitle('');
-    setThreadText('');
-    setThreadImageFile(null);
-    setThreadImagePreview('');
-    setPosting(false);
+      setPostStatus('Posted.');
+      resetForm();
+      await loadPosts();
+    } catch {
+      setPostError(true);
+      setPostStatus('Your post could not be saved. Check your connection and try again.');
+      postedRef.current = false;
+    } finally {
+      setPosting(false);
+    }
   };
 
-  // ── Replies ───────────────────────────────────────────────────────────────
-
-  const updateReplyInput = (threadId: string, value: string) => {
-    setReplyInputs((prev) => ({ ...prev, [threadId]: value }));
+  const loadReplies = async (threadId: string) => {
+    setReplyStatus((prev) => ({ ...prev, [threadId]: 'Loading replies…' }));
+    try {
+      const response = await fetch(`/api/posts/${threadId}/replies`, { credentials: 'include' });
+      if (!response.ok) {
+        setReplyStatus((prev) => ({ ...prev, [threadId]: 'Replies could not be loaded.' }));
+        return;
+      }
+      const data = await response.json() as { replies?: Reply[] };
+      setOpenReplies((prev) => ({ ...prev, [threadId]: Array.isArray(data.replies) ? data.replies : [] }));
+      setReplyStatus((prev) => ({ ...prev, [threadId]: '' }));
+    } catch {
+      setReplyStatus((prev) => ({ ...prev, [threadId]: 'Replies could not be loaded.' }));
+    }
   };
 
   const addReply = async (threadId: string) => {
-    const text = replyInputs[threadId]?.trim() ?? '';
-    if (!text) return;
+    const value = (replyInputs[threadId] ?? '').trim();
+    if (!value) return;
 
-    // Optimistic local update
-    setThreads((prev) =>
-      prev.map((t) =>
-        t.id === threadId
-          ? {
-              ...t,
-              replies: [
-                ...(t.replies ?? []),
-                { id: String(Date.now()), text, time: new Date().toLocaleString() },
-              ],
-              replyCount: (t.replyCount ?? 0) + 1,
-            }
-          : t,
-      ),
-    );
-    updateReplyInput(threadId, '');
-
+    setReplyStatus((prev) => ({ ...prev, [threadId]: 'Sending…' }));
     try {
-      await fetch(`/api/posts/${threadId}/replies`, {
+      const response = await fetch(`/api/posts/${threadId}/replies`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: value }),
       });
+      if (!response.ok) {
+        setReplyStatus((prev) => ({ ...prev, [threadId]: 'Your reply could not be sent. Try again.' }));
+        return;
+      }
+      setReplyInputs((prev) => ({ ...prev, [threadId]: '' }));
+      setReplyStatus((prev) => ({ ...prev, [threadId]: 'Reply posted.' }));
+      await loadReplies(threadId);
+      await loadPosts();
     } catch {
-      // Already shown locally
+      setReplyStatus((prev) => ({ ...prev, [threadId]: 'Your reply could not be sent. Check your connection.' }));
     }
   };
 
-  // ── Reactions ─────────────────────────────────────────────────────────────
-
-  const addReaction = async (threadId: string, reaction: string) => {
-    // Optimistic update
-    setThreads((prev) =>
-      prev.map((t) =>
-        t.id === threadId
-          ? {
-              ...t,
-              reactions: {
-                ...(t.reactions ?? {}),
-                [reaction]: ((t.reactions ?? {})[reaction] ?? 0) + 1,
-              },
-            }
-          : t,
-      ),
-    );
-
+  const setPinned = async (thread: Thread) => {
+    const pinned = !thread.pinned;
     try {
-      await fetch(`/api/posts/${threadId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ reaction }),
-      });
-    } catch {
-      // Non-fatal
-    }
-  };
-
-  // ── Admin actions ─────────────────────────────────────────────────────────
-
-  const deleteThread = async (threadId: string) => {
-    setThreads((prev) => prev.filter((t) => t.id !== threadId));
-    try {
-      await fetch(`/api/posts/${threadId}`, { method: 'DELETE', credentials: 'include' });
-    } catch { /* non-fatal */ }
-  };
-
-  const togglePin = async (thread: Thread) => {
-    const newPinned = !thread.pinned;
-    setThreads((prev) => prev.map((t) => t.id === thread.id ? { ...t, pinned: newPinned } : t));
-    try {
-      await fetch(`/api/posts/${thread.id}`, {
+      const response = await fetch(`/api/posts/${thread.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ pinned: newPinned }),
+        body: JSON.stringify({ pinned }),
       });
-    } catch { /* non-fatal */ }
+      if (!response.ok) {
+        setLoadError('The pin could not be changed. Try again.');
+        return;
+      }
+      await loadPosts();
+    } catch {
+      setLoadError('The pin could not be changed. Check your connection.');
+    }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  const deletePost = async (threadId: string) => {
+    if (!window.confirm('Delete this post and its replies? This cannot be undone.')) return;
+    try {
+      const response = await fetch(`/api/posts/${threadId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        setLoadError('The post could not be deleted. Try again.');
+        return;
+      }
+      await loadPosts();
+    } catch {
+      setLoadError('The post could not be deleted. Check your connection.');
+    }
+  };
 
   return (
     <main className="shell">
-      <header className="hero">
-        <nav>
-          <div className="logo">$lutWalk Denver</div>
-          <ul>
-            <li><Link href="/">Home</Link></li>
-            <li><Link href="/about">About</Link></li>
-            <li><Link href="/shop">Store</Link></li>
-            <li><Link href="/chat">Chat</Link></li>
-            <li><Link href="/calendar">Calendar</Link></li>
-            <li><Link href="/admin-login">Admin</Link></li>
-          </ul>
-        </nav>
+      <section className="hero" aria-labelledby="bulletin-title">
         <div className="hero-overlay">
           <p className="eyebrow">Bulletin board</p>
-          <h1>Announcements, requests, and collective updates.</h1>
-          <p>Members can coordinate volunteer opportunities, mutual aid requests, and projects in one shared space.</p>
-          <div className="btn-row">
-            <Link className="btn btn-secondary" href="/chatroom-spec">View E2EE spec</Link>
-          </div>
+          <h1 id="bulletin-title">Announcements, requests, and updates.</h1>
+          <p>
+            Post announcements, mutual aid requests, and volunteer needs. Replies are
+            visible to signed-in members only.
+          </p>
         </div>
-      </header>
+      </section>
 
-      <section className="featured">
-        <h2>Community posts</h2>
-        <div className="bulletin-grid">
-          <div className="community-board">
-            <article>
-              <h3>Announcements</h3>
-              <p>Volunteer sign-up, wellness reminders, and upcoming actions.</p>
-            </article>
-            <article>
-              <h3>Mutual aid</h3>
-              <p>Ride shares, food support, and local resource sharing.</p>
-            </article>
-            <article>
-              <h3>Discussion topics</h3>
-              <p>Education circles, event planning, and archive collaboration.</p>
-            </article>
-          </div>
+      <section className="featured" aria-labelledby="new-post-title">
+        <h2 id="new-post-title">Start a post</h2>
+        <form className="stack-form" onSubmit={(event) => void createPost(event)}>
+          <label htmlFor="thread-title">Title</label>
+          <input
+            id="thread-title"
+            type="text"
+            value={title}
+            maxLength={120}
+            onChange={(event) => setTitle(event.target.value)}
+            required
+          />
 
-          <section className="chat-container">
-            <header className="chat-header">
-              <h2>Community Chat</h2>
-              <span className="status">● Online</span>
-            </header>
+          <label htmlFor="thread-text">Message</label>
+          <textarea
+            id="thread-text"
+            rows={4}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            required
+          />
 
-            <div className="chat-window" id="chatWindow" ref={chatWindowRef} role="log" aria-live="polite">
-              {messages.map((message) => (
-                <div key={message.id} className={`message ${message.sent ? 'sent' : 'received'}`}>
-                  <div className="avatar" aria-hidden="true">
-                    {message.sender.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="bubble">
-                    <h4>{message.sender}</h4>
-                    <p>{message.text}</p>
-                    <small>{message.time}</small>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <label htmlFor="thread-image">Photo (optional, up to 10 MB)</label>
+          <input id="thread-image" type="file" accept="image/*" onChange={handleImageChange} />
+          {imagePreview && (
+            <Image
+              src={imagePreview}
+              alt="Selected image preview"
+              width={400}
+              height={300}
+              className="post-image"
+              unoptimized
+            />
+          )}
 
-            <div className="chat-input">
-              <label htmlFor="messageInput">Chat message</label>
-              <input
-                type="text"
-                id="messageInput"
-                placeholder="Write a message..."
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={handleSendKey}
-              />
-              <button type="button" id="sendBtn" onClick={() => void sendChatMessage()}>
-                Send
-              </button>
-            </div>
+          <button type="submit" className="btn" disabled={posting} aria-busy={posting}>
+            {posting ? 'Posting…' : 'Post to bulletin'}
+          </button>
+          {postStatus && (
+            <p
+              className={postError ? 'form-message form-message--error' : 'form-message'}
+              role={postError ? 'alert' : 'status'}
+            >
+              {postStatus}
+            </p>
+          )}
+        </form>
+      </section>
 
-            <section className="new-thread">
-              <h2>Create New Thread</h2>
-              <label htmlFor="threadTitle">Thread title</label>
-              <input
-                id="threadTitle"
-                type="text"
-                placeholder="Thread title"
-                value={threadTitle}
-                onChange={(e) => setThreadTitle(e.target.value)}
-              />
-              <label htmlFor="threadText">Thread text</label>
-              <textarea
-                id="threadText"
-                rows={5}
-                placeholder="Start a discussion..."
-                value={threadText}
-                onChange={(e) => setThreadText(e.target.value)}
-              />
-              <label htmlFor="threadImage">Thread image</label>
-              <input id="threadImage" type="file" accept="image/*" onChange={handleImageChange} />
-              {threadImagePreview && (
+      <section className="featured" aria-labelledby="posts-title">
+        <div className="section-heading">
+          <h2 id="posts-title">Recent posts</h2>
+          <button type="button" className="btn btn-secondary" onClick={() => void loadPosts()}>
+            Refresh
+          </button>
+        </div>
+
+        {loading && <p>Loading posts…</p>}
+        {loadError && <p className="notice notice--error" role="alert">{loadError}</p>}
+        {!loading && !loadError && posts.length === 0 && (
+          <p>No posts yet. Start the first one above.</p>
+        )}
+
+        <div className="post-list">
+          {posts.map((post) => (
+            <article className="post" key={post.id}>
+              <header className="post__header">
+                <h3>
+                  {post.pinned && <span className="pin-badge">Pinned</span>}
+                  {post.title}
+                </h3>
+                <span className="muted">{formatTimestamp(post.createdAt)}</span>
+              </header>
+
+              {post.imageUrl ? (
                 <Image
-                  src={threadImagePreview}
-                  alt="Image preview"
-                  width={400}
-                  height={300}
-                  style={{ maxWidth: '100%', height: 'auto', marginTop: '0.5rem' }}
+                  src={post.imageUrl}
+                  alt=""
+                  width={800}
+                  height={500}
+                  className="post-image"
                   unoptimized
                 />
+              ) : null}
+
+              <p className="post__body">{post.text}</p>
+
+              <div className="post__actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => void loadReplies(post.id)}
+                >
+                  {openReplies[post.id] ? 'Reload replies' : `Show replies (${post.replyCount ?? 0})`}
+                </button>
+                {role === 'admin' && (
+                  <>
+                    <button type="button" className="btn btn-secondary" onClick={() => void setPinned(post)}>
+                      {post.pinned ? 'Unpin' : 'Pin'}
+                    </button>
+                    <button type="button" className="btn btn-danger" onClick={() => void deletePost(post.id)}>
+                      Delete
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {openReplies[post.id] && (
+                <div className="replies">
+                  {openReplies[post.id].length === 0 && <p className="helper">No replies yet.</p>}
+                  {openReplies[post.id].map((reply) => (
+                    <div className="reply" key={reply.id}>
+                      <small>{reply.sender || 'Member'} · {formatTimestamp(reply.createdAt)}</small>
+                      <p>{reply.text}</p>
+                    </div>
+                  ))}
+                </div>
               )}
-              <button
-                type="button"
-                id="postThread"
-                onClick={() => void addThread()}
-                disabled={posting}
-                aria-busy={posting}
-              >
-                {posting ? 'Posting…' : 'Post Thread'}
-              </button>
-            </section>
 
-            <h3 className="thread-list-title">Recent Threads</h3>
-            <div id="threads">
-              {threads.map((thread) => (
-                <article className="thread" key={thread.id}>
-                  <div className="thread-header">
-                    <strong>Anonymous</strong> • {thread.createdAt}
-                    {thread.pinned && (
-                      <span className="pin-badge" aria-label="Pinned post">Pinned</span>
-                    )}
-                    {isAdmin && (
-                      <span className="admin-controls">
-                        <button
-                          type="button"
-                          className="btn-ghost"
-                          onClick={() => void togglePin(thread)}
-                          aria-label={thread.pinned ? 'Unpin post' : 'Pin post'}
-                        >
-                          {thread.pinned ? 'Unpin' : 'Pin'}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-ghost btn-danger"
-                          onClick={() => void deleteThread(thread.id)}
-                          aria-label="Delete post"
-                        >
-                          Delete
-                        </button>
-                      </span>
-                    )}
-                  </div>
-                  <div className="thread-body">
-                    <h3>{thread.title}</h3>
-                    {thread.imageUrl ? (
-                      <Image
-                        src={thread.imageUrl}
-                        alt="Thread image"
-                        width={600}
-                        height={400}
-                        style={{ maxWidth: '100%', height: 'auto' }}
-                        unoptimized
-                      />
-                    ) : null}
-                    <p>{thread.text}</p>
-
-                    <div className="reaction-bar" role="group" aria-label="Reactions">
-                      {REACTIONS.map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          className="reaction-btn"
-                          onClick={() => void addReaction(thread.id, emoji)}
-                          aria-label={`React with ${emoji}`}
-                        >
-                          {emoji}{' '}
-                          <span className="reaction-count">
-                            {(thread.reactions?.[emoji] ?? 0) > 0
-                              ? thread.reactions![emoji]
-                              : ''}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="replies">
-                      {(thread.replies ?? []).map((reply) => (
-                        <div className="reply" key={reply.id}>
-                          <small>Anonymous • {reply.time}</small>
-                          <div>{reply.text}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="reply-form">
-                    <label className="sr-only" htmlFor={`reply-${thread.id}`}>Write a reply</label>
-                    <textarea
-                      id={`reply-${thread.id}`}
-                      rows={3}
-                      placeholder="Write a reply..."
-                      value={replyInputs[thread.id] ?? ''}
-                      onChange={(e) => updateReplyInput(thread.id, e.target.value)}
-                    />
-                    <button type="button" onClick={() => void addReply(thread.id)}>Reply</button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
+              <div className="reply-form">
+                <label className="sr-only" htmlFor={`reply-${post.id}`}>Write a reply</label>
+                <textarea
+                  id={`reply-${post.id}`}
+                  rows={2}
+                  value={replyInputs[post.id] ?? ''}
+                  onChange={(event) => setReplyInputs((prev) => ({ ...prev, [post.id]: event.target.value }))}
+                  placeholder="Write a reply…"
+                />
+                <button type="button" className="btn" onClick={() => void addReply(post.id)}>
+                  Reply
+                </button>
+                {replyStatus[post.id] && <p className="helper">{replyStatus[post.id]}</p>}
+              </div>
+            </article>
+          ))}
         </div>
       </section>
     </main>

@@ -37,7 +37,13 @@ export async function GET(request: Request) {
         if (collectionFilter && asset.collection !== collectionFilter) return false;
         if (categoryFilter && asset.category !== categoryFilter) return false;
         return true;
-      });
+      })
+      .map((asset: GalleryAssetRecord) => asset.storagePath
+        ? {
+            ...asset,
+            imageUrl: `/api/storage?path=${encodeURIComponent(asset.storagePath)}`,
+          }
+        : asset);
 
     return NextResponse.json({ assets });
   } catch (err) {

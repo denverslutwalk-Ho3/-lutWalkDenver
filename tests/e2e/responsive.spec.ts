@@ -13,7 +13,9 @@ const BREAKPOINTS = [
 
 const PAGES = [
   { name: 'landing', url: '/' },
+  { name: 'about', url: '/about' },
   { name: 'donate', url: '/donate' },
+  { name: 'login', url: '/login' },
   { name: 'admin-login', url: '/admin-login' },
 ];
 

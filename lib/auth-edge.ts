@@ -1,8 +1,6 @@
 /**
- * Edge-runtime JWT verification using the Web Crypto API.
- * Next.js middleware runs in the Edge runtime, so it cannot import Node.js modules
- * (such as the `crypto` built-in used in lib/auth.ts). This module provides an
- * async verifyToken that is compatible with both Edge and Node.js runtimes.
+ * Middleware JWT verification using Web Crypto, compatible with the Edge and
+ * Node.js runtimes.
  */
 
 function base64urlDecode(b64url: string): ArrayBuffer {
@@ -14,6 +12,15 @@ function base64urlDecode(b64url: string): ArrayBuffer {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;
+}
+
+function base64urlEncode(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 export async function verifyTokenEdge(token: string): Promise<Record<string, unknown> | null> {
@@ -30,6 +37,10 @@ export async function verifyTokenEdge(token: string): Promise<Record<string, unk
     }
 
     const [encodedHeader, encodedBody, signature] = parts;
+    const signatureBytes = base64urlDecode(signature);
+    if (base64urlEncode(signatureBytes) !== signature) {
+      return null;
+    }
 
     const unsigned = `${encodedHeader}.${encodedBody}`;
     const encoder = new TextEncoder();
@@ -46,7 +57,7 @@ export async function verifyTokenEdge(token: string): Promise<Record<string, unk
     const isValid = await crypto.subtle.verify(
       'HMAC',
       cryptoKey,
-      base64urlDecode(signature),
+      signatureBytes,
       encoder.encode(unsigned),
     );
 

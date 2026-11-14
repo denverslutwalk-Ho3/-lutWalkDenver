@@ -1,159 +1,133 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
-import type { GateModel } from '../gate-model';
-import { initialGateModel } from '../gate-model';
+import PasswordForm from '../components/PasswordForm';
 
-const ADMIN_ACCESS_KEY = 'slutwalk-admin-access';
+type Role = 'member' | 'admin' | null;
+
+function nextAdminPath() {
+  if (typeof window === 'undefined') return '/admin';
+  const next = new URLSearchParams(window.location.search).get('next');
+  if (next && next.startsWith('/admin') && !next.startsWith('//')) return next;
+  return '/admin';
+}
 
 export default function AdminLoginPage() {
-  const [gateModel, setGateModel] = useState<GateModel>(initialGateModel);
-  const [message, setMessage] = useState('Administrator access is protected by a separate password.');
-  const [unlocked, setUnlocked] = useState(false);
-  const [notes, setNotes] = useState('');
-  const [eventTitle, setEventTitle] = useState('');
-  const [eventTime, setEventTime] = useState('');
-  const [eventNotes, setEventNotes] = useState('');
+  const router = useRouter();
+  const [role, setRole] = useState<Role>(null);
+  const [configured, setConfigured] = useState<boolean | null>(null);
+  const [logoutPending, setLogoutPending] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
 
   useEffect(() => {
-    const isUnlocked = window.localStorage.getItem(ADMIN_ACCESS_KEY) === 'true';
-    setUnlocked(isUnlocked);
-    if (isUnlocked) {
-      setMessage('Administrator access unlocked.');
-    }
+    let active = true;
+    fetch('/api/auth/session', { credentials: 'include' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { role?: Role; adminLoginConfigured?: boolean } | null) => {
+        if (!active) return;
+        setRole(data?.role ?? null);
+        setConfigured(data?.adminLoginConfigured ?? false);
+      })
+      .catch(() => {
+        if (active) setConfigured(false);
+      });
+    return () => { active = false; };
   }, []);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const signOut = async () => {
+    setLogoutPending(true);
+    setLogoutError('');
 
-    const response = await fetch('/api/auth/admin-login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ password: gateModel.password }),
-    });
+    const results = await Promise.allSettled([
+      fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }),
+      fetch('/api/auth/admin-logout', { method: 'POST', credentials: 'include' }),
+    ]);
 
-    if (response.ok) {
-      window.localStorage.setItem(ADMIN_ACCESS_KEY, 'true');
-      setUnlocked(true);
-      setGateModel(initialGateModel);
-      setMessage('Administrator access unlocked.');
-      window.location.href = '/admin';
+    const failed = results.some(
+      (result) => result.status === 'rejected' || !result.value.ok,
+    );
+
+    if (failed) {
+      setLogoutError('Could not confirm that both sessions were signed out. Please try again.');
+      try {
+        const response = await fetch('/api/auth/session', { credentials: 'include' });
+        if (response.ok) {
+          const data = await response.json() as { role?: Role };
+          setRole(data.role ?? null);
+        }
+      } catch {
+        setLogoutError('Could not confirm sign-out. Refresh the page and check your session.');
+      } finally {
+        setLogoutPending(false);
+      }
       return;
     }
 
-    window.localStorage.removeItem(ADMIN_ACCESS_KEY);
-    setUnlocked(false);
-    setGateModel(initialGateModel);
-    setMessage('Incorrect administrator password.');
-  };
-
-  const handleLogout = async () => {
-    await fetch('/api/auth/admin-logout', {
-      method: 'POST',
-      credentials: 'include',
-    });
-
-    window.localStorage.removeItem(ADMIN_ACCESS_KEY);
-    setUnlocked(false);
-    setGateModel(initialGateModel);
-    setMessage('Administrator access is protected by a separate password.');
+    setRole(null);
+    setLogoutPending(false);
+    router.refresh();
   };
 
   return (
     <main className="shell">
-      <header className="hero">
-        <nav>
-          <div className="logo">$lutWalk Denver</div>
-          <ul>
-            <li><Link href="/">Home</Link></li>
-            <li><Link href="/about">About</Link></li>
-            <li><Link href="/shop">Store</Link></li>
-            <li><Link href="/bulletin">Bulletin</Link></li>
-            <li><Link href="/calendar">Calendar</Link></li>
-          </ul>
-        </nav>
-        <div className="hero-overlay">
-          <p className="eyebrow">Administrator portal</p>
-          <h1>Moderation, management, and archive control.</h1>
-          <p>Separate administrator access for content moderation, event management, and archive uploads.</p>
-        </div>
-      </header>
+      <section className="login-card" aria-labelledby="admin-login-title">
+        <p className="eyebrow">Administrator access</p>
+        <h1 id="admin-login-title">Organizer sign in</h1>
+        <p>
+          Administrators can moderate the bulletin, manage events and the store, and
+          upload archive material. This is a separate session from member access.
+        </p>
 
-      <section className="login-card">
-        <h2>Administrator login</h2>
-        <form className="gate-form" onSubmit={(e) => void handleSubmit(e)}>
-          <label htmlFor="admin-password">Administrator password</label>
-          <div className="form-row">
-            <input
-              id="admin-password"
-              name="admin-password"
-              type="password"
-              autoComplete="current-password"
-              value={gateModel.password}
-              placeholder="Enter admin password"
-              onChange={(event) => setGateModel({ ...gateModel, password: event.target.value })}
-            />
-            <button type="submit">Enter admin</button>
+        {logoutError && <p className="notice notice--warning" role="alert">{logoutError}</p>}
+
+        {role === 'admin' ? (
+          <div className="signed-in">
+            <p>You are signed in as an administrator.</p>
+            <div className="btn-row">
+              <Link className="btn" href="/admin">Open the admin dashboard</Link>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => void signOut()}
+                disabled={logoutPending}
+                aria-busy={logoutPending}
+              >
+                {logoutPending ? 'Signing out…' : 'Sign out'}
+              </button>
+            </div>
           </div>
-          <p className="helper">{message}</p>
-        </form>
-      </section>
+        ) : configured === false ? (
+          <p className="notice notice--warning">
+            Administrator sign-in is not set up yet. The admin password needs to be
+            set on the server.
+          </p>
+        ) : configured ? (
+          <PasswordForm
+            endpoint="/api/auth/admin-login"
+            fieldLabel="Administrator password"
+            submitLabel="Sign in"
+            onSuccess={() => {
+              router.replace(nextAdminPath());
+              router.refresh();
+            }}
+          />
+        ) : (
+          <p className="helper">Checking sign-in status…</p>
+        )}
 
-      <section className={`content ${unlocked ? 'content--open' : 'content--locked'}`}>
-        <div className="btn-row" style={{ justifyContent: 'flex-start' }}>
-          <button className="btn btn-secondary" type="button" onClick={() => void handleLogout()}>
-            Lock admin session
-          </button>
-        </div>
+        {role === 'member' && (
+          <p className="notice">
+            You are currently signed in as a member. Signing in here replaces that
+            session with an administrator session.
+          </p>
+        )}
 
-        <div className="notice-grid">
-          <article>
-            <h3>Data editor</h3>
-            <label htmlFor="admin-notes">Draft notes</label>
-            <textarea
-              id="admin-notes"
-              rows={6}
-              placeholder="Write internal notes or updates..."
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-            />
-            <button type="button">Save draft</button>
-          </article>
-
-          <article>
-            <h3>Calendar editor</h3>
-            <label htmlFor="admin-event-title">Event title</label>
-            <input
-              id="admin-event-title"
-              type="text"
-              placeholder="Volunteer orientation"
-              value={eventTitle}
-              onChange={(event) => setEventTitle(event.target.value)}
-            />
-            <label htmlFor="admin-event-time">Event time</label>
-            <input
-              id="admin-event-time"
-              type="text"
-              placeholder="Sunday • 4:00 PM"
-              value={eventTime}
-              onChange={(event) => setEventTime(event.target.value)}
-            />
-            <label htmlFor="admin-event-notes">Event notes</label>
-            <textarea
-              id="admin-event-notes"
-              rows={6}
-              placeholder="Add description or reminders..."
-              value={eventNotes}
-              onChange={(event) => setEventNotes(event.target.value)}
-            />
-            <button type="button">Preview update</button>
-          </article>
-        </div>
+        <p className="helper">
+          Looking for member access? <Link href="/login">Go to member sign in</Link>.
+        </p>
       </section>
     </main>
   );
 }
-

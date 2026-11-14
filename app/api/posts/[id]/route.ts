@@ -12,6 +12,9 @@ export async function DELETE(
   const { id } = await params;
   try {
     const db = getAdminDb();
+    // Firestore does not cascade subcollections; remove replies with their post.
+    const replies = await db.collection('posts').doc(id).collection('replies').listDocuments();
+    await Promise.all(replies.map((reply) => reply.delete()));
     await db.collection('posts').doc(id).delete();
     return NextResponse.json({ ok: true });
   } catch (err) {

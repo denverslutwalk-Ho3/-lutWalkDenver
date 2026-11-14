@@ -1,111 +1,49 @@
-'use client';
-
-import Link from 'next/link';
+import { CONTACT_EMAIL } from '../../lib/site';
 
 export default function TermsPage() {
   return (
     <main className="shell">
-      <section className="hero" aria-labelledby="page-title">
-        <nav aria-label="Breadcrumb">
-          <Link href="/">$lutWalk Denver</Link>
-          <span aria-hidden="true"> / </span>
-          <span>Terms of Service</span>
-        </nav>
+      <section className="hero" aria-labelledby="terms-title">
         <div className="hero-overlay">
           <p className="eyebrow">Legal</p>
-          <h1 id="page-title">Terms of Service</h1>
-          <p>Last updated: {new Date().toLocaleDateString()}</p>
+          <h1 id="terms-title">Terms of Service</h1>
+          <p>Ground rules for using this community hub.</p>
         </div>
       </section>
 
-      <section className="community-section" aria-labelledby="terms-heading">
-        <div className="section-heading">
-          <h2 id="terms-heading">Terms and Conditions</h2>
-        </div>
+      <section className="featured" aria-labelledby="terms-details-title">
+        <h2 id="terms-details-title">Using this site</h2>
+        <p>
+          Member pages are for people who have been given the shared member password by
+          an organizer. Do not share that password publicly, and do not post someone
+          else&apos;s private information without their consent.
+        </p>
 
-        <article className="card">
-          <h3>Welcome to SlutWalk Denver</h3>
-          <p>
-            These terms and conditions outline the rules and regulations for the use of SlutWalk Denver&apos;s Website,
-            located at https://slutwalkdenver.gay.
-          </p>
-          <p>
-            By accessing this website or using our services, we assume you accept these terms and conditions.
-            Do not continue to use SlutWalk Denver if you do not agree to take all of the terms and conditions stated on this page.
-          </p>
-        </article>
+        <h2>Community conduct</h2>
+        <ul className="plain-list">
+          <li>No harassment, threats, or targeted abuse.</li>
+          <li>No sharing another person&apos;s story, image, or location without consent.</li>
+          <li>No spam, advertising, or content that breaks the law.</li>
+          <li>Organizers may remove posts or accounts that break these rules.</li>
+        </ul>
 
-        <article className="card">
-          <h3>Intellectual Property</h3>
-          <p>
-            The content on this website, including but not limited to text, graphics, logos, images, and software,
-            is the property of SlutWalk Denver and is protected by international copyright laws.
-          </p>
-          <p>
-            You may not reproduce, distribute, modify, transmit, reuse, repost, or use any content from this website
-            for public or commercial purposes without our written permission.
-          </p>
-        </article>
+        <h2>Content you post</h2>
+        <p>
+          You keep ownership of what you post. By posting, you allow the collective to
+          display and store it as part of the site. Organizers may remove content to keep
+          the space safe.
+        </p>
 
-        <article className="card">
-          <h3>User Content</h3>
-          <p>
-            You retain ownership of all content you submit to our platform. By submitting content, you grant us a
-            worldwide, non-exclusive, royalty-free license to use, reproduce, modify, publish, and distribute your
-            content for the purposes of operating and promoting our services.
-          </p>
-        </article>
+        <h2>No warranty</h2>
+        <p>
+          This site is run by volunteers and is provided as-is. It is not a crisis or
+          medical service. In an emergency, contact local emergency services.
+        </p>
 
-        <article className="card">
-          <h3>Prohibited Activities</h3>
-          <p>You agree not to engage in any of the following prohibited activities:</p>
-          <ul>
-            <li>Violating any applicable laws or regulations.</li>
-            <li>Infringing on any intellectual property rights.</li>
-            <li>Engaging in any conduct that restricts or inhibits anyone&apos;s use of the website.</li>
-            <li>Harassing, abusing, or threatening any person.</li>
-            <li>Transmitting any viruses, worms, or other harmful code.</li>
-            <li>Impersonating any person or entity.</li>
-          </ul>
-        </article>
-
-        <article className="card">
-          <h3>Disclaimer</h3>
-          <p>
-            The information provided on this website is for general informational purposes only. We make no representations
-            or warranties of any kind, express or implied, about the completeness, accuracy, reliability, suitability or
-            availability with respect to the website or the information, products, services, or related graphics contained
-            on the website for any purpose.
-          </p>
-        </article>
-
-        <article className="card">
-          <h3>Limitation of Liability</h3>
-          <p>
-            In no event shall SlutWalk Denver, nor its directors, employees, partners, agents, suppliers, or affiliates,
-            be liable for any indirect, incidental, special, consequential or punitive damages, including without limitation,
-            loss of profits, data, use, goodwill, or other intangible losses, resulting from your access to or use of or inability
-            to use the service.
-          </p>
-        </article>
-
-        <article className="card">
-          <h3>Governing Law</h3>
-          <p>
-            These terms and conditions are governed by and construed in accordance with the laws of the State of Colorado,
-            United States, and you irrevocably submit to the exclusive jurisdiction of the courts in that State or location.
-          </p>
-        </article>
-
-        <article className="card">
-          <h3>Contact Us</h3>
-          <p>
-            If you have any questions about these Terms of Service, please contact us at:
-          </p>
-          <p>
-            <a href="mailto:hello@slutwalkdenver.gay">hello@slutwalkdenver.gay</a>
-          </p>
-        </article>
+        <h2>Contact</h2>
+        <p>
+          Questions about these terms: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+        </p>
       </section>
     </main>
   );
