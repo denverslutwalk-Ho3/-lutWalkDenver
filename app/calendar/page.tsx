@@ -26,6 +26,14 @@ function buildCalendarGrid(year: number, month: number): (number | null)[] {
   return cells;
 }
 
+function escapeIcsText(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
+}
+
 function toIcs(event: CalendarEvent): string {
   const dateStr = event.date.replace(/-/g, '');
   return [
@@ -33,11 +41,11 @@ function toIcs(event: CalendarEvent): string {
     'VERSION:2.0',
     'PRODID:-//SlutWalk Denver//EN',
     'BEGIN:VEVENT',
-    `UID:${event.id}@slutwalkdenver`,
+    `UID:${event.id.replace(/[\r\n]/g, '')}@slutwalkdenver`,
     `DTSTART;VALUE=DATE:${dateStr}`,
-    `SUMMARY:${event.title}`,
-    `DESCRIPTION:${event.description.replace(/\n/g, '\\n')}`,
-    `LOCATION:${event.location}`,
+    `SUMMARY:${escapeIcsText(event.title)}`,
+    `DESCRIPTION:${escapeIcsText(event.description)}`,
+    `LOCATION:${escapeIcsText(event.location)}`,
     'END:VEVENT',
     'END:VCALENDAR',
   ].join('\r\n');
