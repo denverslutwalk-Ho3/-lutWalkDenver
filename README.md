@@ -22,6 +22,7 @@ Copy `.env.example` to `.env.local` and set the required values before signing i
 | `FIREBASE_CLIENT_EMAIL` | for data pages | Service account email. |
 | `FIREBASE_PRIVATE_KEY` | for data pages | Service account key (escaped `\n` newlines). |
 | `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | for uploads | Storage bucket for images. |
+| `APIFY_API_TOKEN` | optional, server-only | Reserved for a future Apify integration; no current app feature reads it. Never expose it with a `NEXT_PUBLIC_` prefix. |
 
 There are no fallback passwords. If `MEMBER_PASSWORD` or `ADMIN_PASSWORD` is unset, that login stays locked and the sign-in page explains why.
 
