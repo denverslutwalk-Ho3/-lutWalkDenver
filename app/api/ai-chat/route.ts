@@ -2,10 +2,16 @@ import { NextResponse } from 'next/server';
 import { requireMemberOrAdmin } from '../../../lib/authz';
 import {
   AI_CHAT_MODEL,
-  SYSTEM_PROMPT,
+  buildAgentSystemPrompt,
   sanitizeChatHistory,
-  type AiChatMessage,
 } from '../../../lib/ai-chat';
+import {
+  AGENT_COLLECTION,
+  DEFAULT_AGENT,
+  DEFAULT_AGENT_ID,
+  isValidAgentId,
+} from '../../../lib/ai-agents';
+import { getAdminDb } from '../../../lib/firebase-admin';
 
 const MISTRAL_API_URL = 'https://api.mistral.ai/v1/chat/completions';
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -24,15 +30,44 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json() as { messages?: unknown };
+    const body = await request.json() as { messages?: unknown; agentId?: unknown };
     const history = sanitizeChatHistory(body.messages);
 
     if (!history.ok) {
       return NextResponse.json({ error: history.error }, { status: 400 });
     }
 
+    const requestedAgentId = typeof body.agentId === 'string' ? body.agentId.trim() : '';
+    const agentId = requestedAgentId || DEFAULT_AGENT_ID;
+    let agentPrompt: string = DEFAULT_AGENT.systemPrompt;
+
+    if (agentId !== DEFAULT_AGENT_ID) {
+      if (!isValidAgentId(agentId)) {
+        return NextResponse.json({ error: 'Invalid assistant id' }, { status: 400 });
+      }
+
+      try {
+        const db = getAdminDb();
+        const snap = await db.collection(AGENT_COLLECTION).doc(agentId).get();
+        const data = snap.data() as Record<string, unknown> | undefined;
+        const storedPrompt = typeof data?.systemPrompt === 'string' ? data.systemPrompt : '';
+
+        if (!snap.exists || !storedPrompt.trim()) {
+          return NextResponse.json({ error: 'That assistant is not available' }, { status: 404 });
+        }
+        agentPrompt = storedPrompt;
+      } catch (err) {
+        console.error('POST /api/ai-chat agent lookup error:', err);
+        return NextResponse.json(
+          { error: 'That assistant is unavailable right now. Try the default assistant.' },
+          { status: 503 },
+        );
+      }
+    }
+
     // The conversation is forwarded to Mistral for this single request and is
-    // not stored or logged by this application.
+    // not stored or logged by this application. The shared guardrails are always
+    // applied server-side, whatever the agent's own prompt says.
     const response = await fetch(MISTRAL_API_URL, {
       method: 'POST',
       headers: {
@@ -43,7 +78,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model: AI_CHAT_MODEL,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: buildAgentSystemPrompt(agentPrompt) },
           ...history.messages,
         ] as Array<{ role: string; content: string }>,
         temperature: 0.6,

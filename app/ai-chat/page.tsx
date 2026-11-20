@@ -1,10 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { DEFAULT_AGENT } from '../../lib/ai-agents';
+import type { AgentOption } from '../../lib/ai-agents';
 
 type ConversationMessage = {
   role: 'user' | 'assistant';
   content: string;
+};
+
+const BUILT_IN_AGENT: AgentOption = {
+  id: DEFAULT_AGENT.id,
+  name: DEFAULT_AGENT.name,
+  description: DEFAULT_AGENT.description,
 };
 
 export default function AiChatPage() {
@@ -14,6 +22,42 @@ export default function AiChatPage() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState('');
+  const [agents, setAgents] = useState<AgentOption[]>([BUILT_IN_AGENT]);
+  const [agentId, setAgentId] = useState<string>(DEFAULT_AGENT.id);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadAgents = async () => {
+      try {
+        const response = await fetch('/api/ai-agents', { credentials: 'include' });
+        if (!response.ok) return;
+        const data = await response.json() as { agents?: AgentOption[] };
+        if (!active || !Array.isArray(data.agents) || data.agents.length === 0) return;
+        setAgents(data.agents);
+        setAgentId((current) =>
+          data.agents?.some((agent) => agent.id === current) ? current : data.agents![0].id,
+        );
+      } catch {
+        // Keep the built-in assistant available if the list cannot be loaded.
+      }
+    };
+
+    void loadAgents();
+    return () => { active = false; };
+  }, []);
+
+  const selectedAgent = agents.find((agent) => agent.id === agentId) ?? agents[0];
+
+  const changeAgent = (nextId: string) => {
+    if (nextId === agentId) return;
+    setAgentId(nextId);
+    // A conversation with one assistant should not silently continue with
+    // another, so switching starts fresh.
+    setMessages([]);
+    setStatus('');
+    setDraft('');
+  };
 
   const send = async () => {
     const text = draft.trim();
@@ -30,7 +74,7 @@ export default function AiChatPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({ messages: nextMessages, agentId }),
       });
 
       const data = await response.json().catch(() => null) as { reply?: unknown; error?: string } | null;
@@ -108,6 +152,29 @@ export default function AiChatPage() {
           <h2 id="ai-conversation-title">Conversation</h2>
         </div>
 
+        <div className="stack-form">
+          <label htmlFor="ai-agent-select">Assistant</label>
+          <select
+            id="ai-agent-select"
+            className="admin-select"
+            value={agentId}
+            onChange={(event) => changeAgent(event.target.value)}
+            disabled={sending}
+          >
+            {agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {agent.name}
+              </option>
+            ))}
+          </select>
+          {selectedAgent?.description ? (
+            <p className="helper">{selectedAgent.description}</p>
+          ) : null}
+          {agents.length > 1 ? (
+            <p className="helper">Switching assistants starts a new conversation.</p>
+          ) : null}
+        </div>
+
         {status ? (
           <p className="notice notice--error" role="alert" aria-live="assertive">
             {status}
@@ -128,7 +195,7 @@ export default function AiChatPage() {
                 data-role={message.role}
               >
                 <header>
-                  <strong>{message.role === 'user' ? 'You' : 'Assistant'}</strong>
+                  <strong>{message.role === 'user' ? 'You' : selectedAgent?.name ?? 'Assistant'}</strong>
                 </header>
                 <p>{message.content}</p>
               </article>
