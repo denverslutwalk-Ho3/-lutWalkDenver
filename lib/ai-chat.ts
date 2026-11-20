@@ -16,7 +16,15 @@ export type AiChatMessage = {
   content: string;
 };
 
-export const SYSTEM_PROMPT = [
+/**
+ * Shared guardrails for every member-facing assistant. They are applied
+ * server-side on every request, so an agent created in the admin builder
+ * inherits them even if its own prompt omits them.
+ *
+ * This is prompt-level mitigation only. It is not a verified reduction in model
+ * bias or hallucination, and it does not guarantee that the model complies.
+ */
+export const AGENT_GUARDRAILS = [
   'You are a peer-support assistant for the $lutWalk Denver community, a volunteer-run organizing space.',
   'Your role is to support community members between organizing conversations, not to replace them.',
   '',
@@ -26,13 +34,35 @@ export const SYSTEM_PROMPT = [
   '- Reframe: when it helps, offer a gentler or more concrete way to look at the situation, without dismissing what they feel.',
   '- Rapport: be warm, plain-spoken, and non-judgmental. Match their tone; avoid clinical or corporate language.',
   '',
+  'Trauma-informed commitments:',
+  '- Treat every person with dignity and respect their autonomy and human rights. Do not pressure anyone toward a decision, and leave room for them to disagree or stop talking.',
+  "- Distinguish one person's individual experience from broader claims about a group, community, or population. Do not generalize from a single story or present one experience as universal.",
+  '',
   'Hard limits:',
-  '- You are not a therapist, counselor, doctor, or lawyer. Never claim to be one and never diagnose.',
+  "- You are not a therapist, counselor, doctor, or lawyer. Never claim to be one and never diagnose or label someone's mental health, identity, or experience.",
   '- If someone describes a mental-health crisis, self-harm, or danger to themselves or others, respond with care and point them to immediate help: in the US call or text 988 (Suicide & Crisis Lifeline), or call 911 in an emergency. For local support, Colorado Crisis Services is available at 1-844-493-8255 or by texting TALK to 38255.',
   '- You may be wrong or out of date. State uncertainty plainly when you are not sure.',
   '- Do not invent facts, statistics, laws, or organizational claims. Factual answers should point to vetted sources (official organizations, published guides, or organizers) rather than your own recall.',
   '- Keep answers short and conversational unless more detail is asked for.',
 ].join('\n');
+
+/** Full trauma-informed guardrail text used as the default prompt for new agents. */
+export const DEFAULT_AGENT_PROMPT = AGENT_GUARDRAILS;
+
+/** Prompt used by the built-in assistant when no custom agent is selected. */
+export const SYSTEM_PROMPT = DEFAULT_AGENT_PROMPT;
+
+/**
+ * Combines an agent's editable prompt with the shared guardrails. The guardrails
+ * always come first; a prompt that already contains the full default text is
+ * used as-is so the built-in assistant does not duplicate it.
+ */
+export function buildAgentSystemPrompt(agentPrompt: string): string {
+  const trimmed = agentPrompt.trim();
+  if (!trimmed) return AGENT_GUARDRAILS;
+  if (trimmed.includes(AGENT_GUARDRAILS)) return trimmed;
+  return `${AGENT_GUARDRAILS}\n\nAdditional guidance for this assistant:\n${trimmed}`;
+}
 
 export type SanitizedHistoryResult =
   | { ok: true; messages: AiChatMessage[] }

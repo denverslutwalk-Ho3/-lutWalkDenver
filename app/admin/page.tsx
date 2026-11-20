@@ -3,6 +3,12 @@
 import Image from 'next/image';
 import { useEffect, useState, useCallback } from 'react';
 import type { FormEvent, ChangeEvent } from 'react';
+import { DEFAULT_AGENT_PROMPT } from '../../lib/ai-chat';
+import {
+  MAX_AGENT_DESCRIPTION_LENGTH,
+  MAX_AGENT_NAME_LENGTH,
+  MAX_AGENT_PROMPT_LENGTH,
+} from '../../lib/ai-agents';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -50,16 +56,25 @@ type GalleryAsset = {
   imageUrl: string;
 };
 
+type AiAgent = {
+  id: string;
+  name: string;
+  description: string;
+  systemPrompt?: string;
+  builtIn?: boolean;
+};
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function AdminDashboardPage() {
-  const [activeTab, setActiveTab] = useState<'stats' | 'moderation' | 'events' | 'products' | 'archive'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'moderation' | 'events' | 'products' | 'agents' | 'archive'>('stats');
 
   const [stats, setStats] = useState<Stats>({ posts: 0, events: 0, products: 0 });
   const [posts, setPosts] = useState<Post[]>([]);
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [galleryAssets, setGalleryAssets] = useState<GalleryAsset[]>([]);
+  const [agents, setAgents] = useState<AiAgent[]>([]);
 
   // Event form
   const [evtTitle, setEvtTitle] = useState('');
@@ -80,6 +95,13 @@ export default function AdminDashboardPage() {
   const [prodStatus, setProdStatus] = useState('');
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
+  // Agent form
+  const [agentName, setAgentName] = useState('');
+  const [agentDescription, setAgentDescription] = useState('');
+  const [agentPrompt, setAgentPrompt] = useState(DEFAULT_AGENT_PROMPT);
+  const [agentStatus, setAgentStatus] = useState('');
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+
   // Archive upload
   const [archiveFile, setArchiveFile] = useState<File | null>(null);
   const [archiveCollection, setArchiveCollection] = useState<'archive' | 'community'>('archive');
@@ -92,11 +114,12 @@ export default function AdminDashboardPage() {
   // ── Data fetching ────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
-    const [postsRes, eventsRes, productsRes, galleryRes] = await Promise.allSettled([
+    const [postsRes, eventsRes, productsRes, galleryRes, agentsRes] = await Promise.allSettled([
       fetch('/api/posts?limit=50', { credentials: 'include' }),
       fetch('/api/events?limit=50', { credentials: 'include' }),
       fetch('/api/products', { credentials: 'include' }),
       fetch('/api/gallery?limit=80', { credentials: 'include' }),
+      fetch('/api/ai-agents', { credentials: 'include' }),
     ]);
 
     if (postsRes.status === 'fulfilled' && postsRes.value.ok) {
@@ -120,6 +143,12 @@ export default function AdminDashboardPage() {
     if (galleryRes.status === 'fulfilled' && galleryRes.value.ok) {
       const json = await galleryRes.value.json() as { assets?: GalleryAsset[] };
       setGalleryAssets(json.assets ?? []);
+    }
+    if (agentsRes.status === 'fulfilled' && agentsRes.value.ok) {
+      const json = await agentsRes.value.json() as { agents?: AiAgent[] };
+      setAgents(json.agents ?? []);
+    } else {
+      setAgentStatus('Assistants could not be loaded. Check the Firebase configuration.');
     }
   }, []);
 
@@ -293,6 +322,69 @@ export default function AdminDashboardPage() {
     setProducts((prev) => prev.filter((p) => p.id !== id));
   };
 
+  // ── Agents ───────────────────────────────────────────────────────────────
+
+  const resetAgentForm = (status = '') => {
+    setAgentName('');
+    setAgentDescription('');
+    setAgentPrompt(DEFAULT_AGENT_PROMPT);
+    setEditingAgentId(null);
+    setAgentStatus(status);
+  };
+
+  const startEditAgent = (agent: AiAgent) => {
+    setEditingAgentId(agent.id);
+    setAgentName(agent.name);
+    setAgentDescription(agent.description);
+    setAgentPrompt(agent.systemPrompt ?? DEFAULT_AGENT_PROMPT);
+    setAgentStatus(`Editing "${agent.name}". Save to update it.`);
+  };
+
+  const saveAgent = async (e: FormEvent) => {
+    e.preventDefault();
+    setAgentStatus('Saving…');
+    const res = await fetch(
+      editingAgentId ? `/api/ai-agents/${editingAgentId}` : '/api/ai-agents',
+      {
+        method: editingAgentId ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: agentName,
+          description: agentDescription,
+          systemPrompt: agentPrompt,
+        }),
+      },
+    );
+
+    if (res.ok) {
+      resetAgentForm(editingAgentId ? 'Assistant updated' : 'Assistant created');
+      void loadData();
+    } else {
+      const result = await res.json().catch(() => null) as { error?: unknown } | null;
+      setAgentStatus(
+        typeof result?.error === 'string' ? result.error : 'Error saving assistant',
+      );
+    }
+  };
+
+  const deleteAgent = async (agent: AiAgent) => {
+    if (!window.confirm(`Delete "${agent.name}"? This cannot be undone.`)) return;
+    const response = await fetch(`/api/ai-agents/${agent.id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => null) as { error?: unknown } | null;
+      setAgentStatus(
+        typeof result?.error === 'string' ? result.error : 'Error deleting assistant',
+      );
+      void loadData();
+      return;
+    }
+    setAgents((prev) => prev.filter((item) => item.id !== agent.id));
+  };
+
   // ── Archive ───────────────────────────────────────────────────────────────
 
   const uploadArchiveFile = async (e: FormEvent) => {
@@ -359,6 +451,7 @@ export default function AdminDashboardPage() {
     { key: 'moderation', label: 'Moderation' },
     { key: 'events', label: 'Events' },
     { key: 'products', label: 'Products' },
+    { key: 'agents', label: 'Agents' },
     { key: 'archive', label: 'Archive' },
   ];
 
@@ -592,6 +685,106 @@ export default function AdminDashboardPage() {
                 </article>
               ))}
               {products.length === 0 && <p>No products yet.</p>}
+            </div>
+          </>
+        )}
+
+        {/* ── Agents ────────────────────────────────────────────────────── */}
+        {activeTab === 'agents' && (
+          <>
+            <h2>AI assistant agents</h2>
+            <div className="notice" role="note">
+              <p>
+                Every assistant automatically receives the shared Anchor / Mirror /
+                Reframe / Rapport guardrails and crisis guidance. Editing a prompt
+                changes the assistant&apos;s voice and focus, not those limits.
+              </p>
+              <p>
+                Anyone with the shared admin password can change what every
+                member&apos;s assistant says. Prompt-level guardrails are a mitigation
+                only; they are not a verified reduction in bias or hallucination.
+              </p>
+            </div>
+
+            <form className="admin-form" onSubmit={(e) => void saveAgent(e)}>
+              <h3>{editingAgentId ? 'Edit assistant' : 'Add assistant'}</h3>
+
+              <label htmlFor="agent-name">Name</label>
+              <input
+                id="agent-name"
+                type="text"
+                value={agentName}
+                onChange={(e) => setAgentName(e.target.value)}
+                maxLength={MAX_AGENT_NAME_LENGTH}
+                required
+              />
+
+              <label htmlFor="agent-description">Who is this for?</label>
+              <textarea
+                id="agent-description"
+                rows={2}
+                value={agentDescription}
+                onChange={(e) => setAgentDescription(e.target.value)}
+                maxLength={MAX_AGENT_DESCRIPTION_LENGTH}
+                required
+              />
+
+              <label htmlFor="agent-prompt">System prompt</label>
+              <textarea
+                id="agent-prompt"
+                rows={12}
+                value={agentPrompt}
+                onChange={(e) => setAgentPrompt(e.target.value)}
+                maxLength={MAX_AGENT_PROMPT_LENGTH}
+                required
+              />
+              <p className="helper">
+                New assistants start with the full trauma-informed guardrail text.
+                The server re-applies the shared guardrails on every request.
+              </p>
+
+              <button type="submit" className="btn">
+                {editingAgentId ? 'Save changes' : 'Add assistant'}
+              </button>
+              {editingAgentId && (
+                <button type="button" className="btn btn-secondary" onClick={() => resetAgentForm()}>
+                  Cancel editing
+                </button>
+              )}
+              {agentStatus && <p className="helper">{agentStatus}</p>}
+            </form>
+
+            <h3>Edit or delete assistants</h3>
+            <div className="admin-list">
+              {agents.map((agent) => (
+                <article key={agent.id} className="admin-list-item">
+                  <div className="admin-list-meta">
+                    <strong>{agent.name}</strong>
+                    {agent.builtIn && <span className="pin-badge">Built-in</span>}
+                  </div>
+                  <p className="admin-list-body">{agent.description}</p>
+                  {!agent.builtIn && (
+                    <div className="admin-list-actions">
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => startEditAgent(agent)}
+                        aria-label={`Edit ${agent.name}`}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        onClick={() => void deleteAgent(agent)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </article>
+              ))}
+              {agents.length === 0 && <p>No assistants yet.</p>}
             </div>
           </>
         )}

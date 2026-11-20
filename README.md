@@ -31,7 +31,7 @@ There are no fallback passwords. If `MEMBER_PASSWORD` or `ADMIN_PASSWORD` is uns
 ```
 app/                 routes (App Router)
   components/        shared header, footer, password form
-  api/               route handlers (auth, posts, events, products, gallery, upload, messages)
+  api/               route handlers (auth, posts, events, products, gallery, upload, messages, ai-chat, ai-agents)
   globals.css        design tokens + all shared styles
   layout.tsx         metadata, header, footer
 lib/                 auth, session lookup, passwords, Firebase Admin, chat crypto, site links
@@ -54,6 +54,7 @@ public/              favicon, icon, manifest, robots, sitemap, published media
 | `/bulletin` | member | Posts and replies |
 | `/calendar` | member | Events and RSVPs |
 | `/chat` | member | Encrypted member chat |
+| `/ai-chat` | member | One-on-one AI assistant; admins manage assistants in `/admin` |
 | `/community` | member | Shared gallery |
 | `/archive` | member | Protected archive collection plus uploaded archive |
 | `/shop` | member | Store items managed in the admin |
@@ -66,11 +67,19 @@ public/              favicon, icon, manifest, robots, sitemap, published media
 - One shared password per role, checked in `lib/passwords.ts` and signed into an http-only JWT (`lib/auth.ts`).
 - `middleware.ts` enforces access before a page renders and redirects to `/login?next=…` or `/admin-login?next=…`.
 - Member and admin sessions are mutually exclusive (`sw_auth` vs `sw_admin`).
-- Every data API re-checks the session server-side; writes to events, products, and the gallery require the admin role.
+- Every data API re-checks the session server-side; writes to events, products, the gallery, and AI assistants require the admin role.
+
+### Admin-editable AI prompts
+
+Admins can create, edit, and delete named assistants in `/admin`; each has a name, a short description of who it is for, and its own system prompt. Members choose an assistant on `/ai-chat` and default to the built-in one.
+
+This changes the security impact of the shared admin password: it now controls not just content and store data but **what every member's assistant says**. Anyone who obtains the admin password can change assistant behavior for all members, including instructions that weaken the tone or focus of replies. Treat that password as control over member-facing AI behavior, rotate it if it may have leaked (sessions are revoked when it changes), and do not share it more widely than necessary.
+
+Prompt-level guardrails are mitigation only. The server prepends the Anchor / Mirror / Reframe / Rapport block, the trauma-informed commitments (dignity, autonomy, human rights; individual experience versus broader claims), and the hard limits (no diagnosis, not a therapist, crisis resources) to every agent prompt on every request, and agent prompts are validated and length-limited server-side. That does **not** guarantee the model follows them and is **not a verified reduction in bias or hallucination**. Model output can still be wrong, biased, or unsafe; prompts are not automatically safety-reviewed. The `/ai-chat` page keeps its crisis resources and "not a therapist" disclosure visible regardless of which assistant is selected.
 
 ## Data
 
-Firestore collections: `posts` (with a `replies` subcollection), `messages`, `events`, `products`, `galleryAssets`. Files uploaded to Firebase Storage through `/api/upload` are served through authenticated `/api/storage` URLs. Uploading archive, community, and product files is admin-only; signed-in members can read them. Existing objects may retain public access and must be reviewed with the Firebase owner; see the [deployment runbook](./docs/deployment-runbook.md).
+Firestore collections: `posts` (with a `replies` subcollection), `messages`, `events`, `products`, `galleryAssets`, and `aiAgents` (admin-managed assistant definitions). Files uploaded to Firebase Storage through `/api/upload` are served through authenticated `/api/storage` URLs. Uploading archive, community, and product files is admin-only; signed-in members can read them. Existing objects may retain public access and must be reviewed with the Firebase owner; see the [deployment runbook](./docs/deployment-runbook.md).
 
 Chat messages are encrypted in the browser with a shared room key derived from `AUTH_SECRET`. The server and every signed-in member can derive the key, so this is not end-to-end encryption and should not be used for confidential messages.
 
@@ -83,7 +92,7 @@ Calendar exports intentionally use all-day dates in `America/Denver`; event time
 ## Tests
 
 ```bash
-npm test                    # unit tests (vitest)
+npm test                    # unit tests (vitest), including agent validation and admin-only route access
 npm run test:e2e            # Playwright; login-flow tests need configured passwords and Firebase
 npm run test:a11y           # axe-core checks, including protected pages with test-only auth
 npm run test:responsive     # layout checks
