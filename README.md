@@ -125,9 +125,44 @@ Member and administrator access use separate shared passwords:
 6. API routes repeat authorization checks before reading or changing data.
 7. Member and administrator sessions are mutually exclusive.
 
-This is role-level shared-password access, not individual member identity or account management.
+Alternatively, members can sign in with **Firebase Authentication** (
+`we-can-chat-13c4u` project) using email/password, Google, or phone sign-in:
+
+1. `FirebaseSignIn` on `/login` performs the sign-in in the browser with the
+   Firebase Web SDK and posts the resulting ID token to `/api/auth/firebase`.
+2. That route verifies the ID token server-side with Firebase Admin
+   (`verifyIdToken` with revocation checking), applies the same Firestore-backed
+   login rate limit, and issues the same signed `sw_auth` member session cookie.
+
+**Role boundary:** Firebase sign-ins only ever receive the member role, and
+every Firebase-authenticated user gains member access once the providers are
+enabled — including anyone who creates an email/password account. Administrator
+access stays exclusively behind the shared admin password on `/admin-login`. If
+open member self-registration is not desired, restrict Email/Password sign-up or
+add an allowlist before enabling the providers publicly.
+
+This is role-level shared-password access, not individual member identity or
+account management.
 
 Member sessions are currently configured for 30 days and administrator sessions for 8 hours. Password-version claims invalidate sessions after a password or `AUTH_SECRET` rotation.
+
+### Enabling the Firebase sign-in providers (organizer task)
+
+The sign-in providers are not enabled by this repository; they must be turned on
+in the Firebase Console for project `we-can-chat-13c4u`:
+
+1. Open <https://console.firebase.google.com/project/we-can-chat-13c4u/authentication/providers>.
+2. Enable **Email/Password**, **Google**, and **Phone**.
+3. Under Authentication → Settings → Authorized domains, add the production
+   domain (`slutwalkdenver.gay`, no protocol or port). `localhost` is authorized
+   for local development automatically.
+4. Confirm the server environment sets `FIREBASE_PROJECT_ID=we-can-chat-13c4u`
+   plus the matching `FIREBASE_CLIENT_EMAIL` and `FIREBASE_PRIVATE_KEY`, because
+   the bridge route verifies tokens with the Admin SDK.
+
+Phone sign-in sends SMS codes and typically requires a verified reCAPTCHA
+connection; test it with real devices or the Firebase Auth emulator before
+relying on it.
 
 ### Chat privacy limitation
 

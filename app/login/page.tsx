@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import PasswordForm from '../components/PasswordForm';
+import FirebaseSignIn from '../components/FirebaseSignIn';
 
 type Role = 'member' | 'admin' | null;
 
@@ -71,15 +72,24 @@ export default function LoginPage() {
             password on the server.
           </p>
         ) : configured ? (
-          <PasswordForm
-            endpoint="/api/auth/login"
-            fieldLabel="Member password"
-            submitLabel="Sign in"
-            onSuccess={() => {
-              router.replace(safeNextPath());
-              router.refresh();
-            }}
-          />
+          <>
+            <PasswordForm
+              endpoint="/api/auth/login"
+              fieldLabel="Member password"
+              submitLabel="Sign in"
+              onSuccess={() => {
+                router.replace(safeNextPath());
+                router.refresh();
+              }}
+            />
+            <h2 className="section-heading">Or sign in with a Firebase account</h2>
+            <FirebaseSignIn
+              onSuccess={() => {
+                router.replace(safeNextPath());
+                router.refresh();
+              }}
+            />
+          </>
         ) : (
           <p className="helper">Checking sign-in status…</p>
         )}
