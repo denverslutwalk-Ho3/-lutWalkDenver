@@ -1,149 +1,296 @@
-# SlutWalk Denver community hub
+# SlutWalk Denver Community Hub
 
-A Next.js App Router site for SlutWalk Denver: public information pages, a shared-password member area, and a separate organizer dashboard.
+SlutWalk Denver is a Next.js community website for public organizing information and a private, shared-password member area. It combines public education and policy pages with a protected community bulletin, events, gallery, archive, chat, store, reporting, and optional AI-assisted support.
 
-## Run it
+The application is intended for the SlutWalk Denver community and organizers. It uses role-level shared passwords rather than individual member accounts.
+
+## Technology stack
+
+The checked-in application currently uses:
+
+| Technology | Version in the lockfile | Purpose |
+|---|---:|---|
+| Next.js | 15.5.29 | App Router pages, layouts, API routes, middleware, redirects, headers, and production builds |
+| React | 19.2.8 | Browser components and interactive UI |
+| React DOM | 19.2.8 | React rendering integration used by Next.js |
+| TypeScript | 5.9.3 | Strict application and test typing |
+| Node.js | 22 or newer | Required server/runtime version |
+| npm | Lockfile v3 | Dependency installation and project scripts |
+| Firebase Admin | 14.5.1 | Server-side Firebase initialization, Firestore, and Storage access |
+| Vitest | 5.1.0 | Unit and route tests |
+| Playwright | 1.65.1 | Browser, route, authentication, responsive, and accessibility tests |
+| axe-core through `@axe-core/playwright` | 4.14.0 | Automated accessibility checks |
+| JSDOM | 24.1.3 | Browser-like unit-test environment |
+
+The UI uses custom React components and custom CSS in `app/globals.css`. No separate UI component library or CSS framework is installed.
+
+External integrations implemented in the source include Firebase Admin with Cloud Firestore and Firebase Storage, plus a server-to-Mistral HTTP API for `/ai-chat`. Their live availability is not established by this repository alone.
+
+## Application features
+
+### Public pages
+
+- Landing page
+- About and donation pages
+- Privacy, terms, and accessibility policies
+- Member sign-in
+- Organizer sign-in
+
+### Member community
+
+- Bulletin posts, pinned posts, and replies
+- Persistent individual discussion pages
+- Shared encrypted-in-browser chat
+- Community calendar and role-level RSVPs
+- Shared gallery
+- Protected archive with uploaded and bundled historical media
+- Community-agreement acceptance record
+- Zine and product information
+- Optional AI chat assistants
+
+### Administrator dashboard
+
+The `/admin` route provides organizer controls for:
+
+- Bulletin posts and replies
+- Reports and moderation status
+- Events and event archiving
+- Products and product images
+- Community/archive gallery assets
+- Archive uploads
+- Named AI assistant prompts
+
+### Current route layout
+
+Public routes include `/`, `/about`, `/donate`, `/privacy`, `/terms`, `/accessibility`, `/login`, and `/admin-login`.
+
+Protected member/admin routes include `/care`, `/archive`, `/bulletin`, `/calendar`, `/chat`, `/ai-chat`, `/community`, `/education`, `/organizing`, `/shop`, and `/zines`.
+
+`/admin` is administrator-only. `/events` redirects to `/calendar`, `/shop/success` redirects to `/donate`, and legacy `.html` routes redirect to their App Router equivalents.
+
+## Architecture
+
+This is a server-rendered Next.js App Router application rather than a static-export site.
+
+- `app/` contains layouts, pages, shared components, and API route handlers.
+- `app/components/` contains the shared header, footer, and password form.
+- `app/api/` contains same-origin backend endpoints.
+- `middleware.ts` checks protected page access before rendering.
+- `lib/` contains authentication, session validation, password handling, Firebase, storage, chat, calendar, AI, reporting, and validation helpers.
+- Firestore is accessed only through Firebase Admin from server code.
+- Firebase Storage files are served through authenticated `/api/storage` URLs or the allowlisted `/api/archive-media/[filename]` route.
+- React components call `/api/*` endpoints and update their local state.
+
+### Authentication flow
+
+Member and administrator access use separate shared passwords:
+
+1. A visitor opens `/login` or `/admin-login`.
+2. `PasswordForm` submits the password to `/api/auth/login` or `/api/auth/admin-login`.
+3. The API checks the configured password and Firestore-backed login rate limit.
+4. A signed session token is issued and stored in an HttpOnly cookie:
+   - `sw_auth` for members
+   - `sw_admin` for organizers
+5. Middleware validates the role and password-version claims for protected pages.
+6. API routes repeat authorization checks before reading or changing data.
+7. Member and administrator sessions are mutually exclusive.
+
+This is role-level shared-password access, not individual member identity or account management.
+
+Member sessions are currently configured for 30 days and administrator sessions for 8 hours. Password-version claims invalidate sessions after a password or `AUTH_SECRET` rotation.
+
+### Chat privacy limitation
+
+Chat messages use browser-side AES-GCM encryption with a room key derived from `AUTH_SECRET`. Because the server and every signed-in member can derive the key, this is shared-room encryption rather than end-to-end encryption. It should not be treated as confidential end-to-end private messaging.
+
+Mistral chat sends submitted text to Mistral and is not end-to-end encrypted.
+
+### Media privacy limitation
+
+New uploads are intended to remain private and be retrieved through authenticated API routes. Existing Firebase Storage objects may retain public access from earlier configuration. The bucket, object ACLs, and migration status must be reviewed and verified by the Firebase owner.
+
+## Project structure
+
+```text
+app/                 Next.js App Router pages, layouts, components, and API routes
+app/components/      Shared header, footer, and password form
+app/api/             Server-side API endpoints
+lib/                 Authentication, Firebase, storage, chat, AI, validation, and helper code
+middleware.ts        Protected-page access control
+assets/community-media/  Community archive and zine source media kept outside public/
+public/              Browser-published logos, favicon, manifest, robots, and sitemap
+tests/unit/          Vitest route tests
+tests/e2e/           Playwright functional, accessibility, and responsive tests
+docs/                Deployment runbook and project inventory
+.github/workflows/   GitHub Actions CI
+```
+
+Generated `node_modules/` and `.next/` directories are not source files.
+
+## Local development
+
+### Prerequisites
+
+- Node.js 22 or newer
+- npm
+- Optional Firebase Admin credentials for data and media features
+- Optional Mistral API key for `/ai-chat`
+
+### Install
 
 ```bash
 npm ci
-npm run dev        # http://localhost:3000
-npm run build      # production build
-npm run start      # run the production build
 ```
 
-Copy `.env.example` to `.env.local` and set the required values before signing in:
+### Configure
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `AUTH_SECRET` | yes | Signs member and admin session cookies. Any long random string. |
-| `MEMBER_PASSWORD` | yes | The shared member password. |
-| `ADMIN_PASSWORD` | yes | Organizer password for `/admin-login`. |
-| `FIREBASE_PROJECT_ID` | for data pages | Firestore project. |
-| `FIREBASE_CLIENT_EMAIL` | for data pages | Service account email. |
-| `FIREBASE_PRIVATE_KEY` | for data pages | Service account key (escaped `\n` newlines). |
-| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | for uploads | Storage bucket for images. |
-| `APIFY_API_TOKEN` | optional, server-only | Reserved for a future Apify integration; no current app feature reads it. Never expose it with a `NEXT_PUBLIC_` prefix. |
-
-There are no fallback passwords. If `MEMBER_PASSWORD` or `ADMIN_PASSWORD` is unset, that login stays locked and the sign-in page explains why.
-
-## Structure
-
-```
-app/                 routes (App Router)
-  components/        shared header, footer, password form
-  api/               route handlers (auth, posts, events, products, gallery, upload, messages, ai-chat, ai-agents)
-  globals.css        design tokens + all shared styles
-  layout.tsx         metadata, header, footer
-lib/                 auth, session lookup, passwords, Firebase Admin, chat crypto, site links
-middleware.ts        gates member and admin routes
-tests/e2e/           Playwright route, auth, accessibility, and responsive tests
-docs/                deployment runbook
-assets/              community media kept out of the public bundle
-public/              favicon, icon, manifest, robots, sitemap, published media
-```
-
-## Routes
-
-| Route | Access | Purpose |
-| --- | --- | --- |
-| `/`, `/about`, `/donate` | public | Landing, mission, giving |
-| `/privacy`, `/terms`, `/accessibility` | public | Policies |
-| `/login` | public | Member sign in |
-| `/admin-login` | public | Organizer sign in |
-| `/admin` | admin | Moderation, events, products, archive uploads |
-| `/bulletin` | member | Categorized discussions, replies, and private reports |
-| `/bulletin/[id]` | member | Persistent individual discussion and replies |
-| `/community-agreement` | member/admin | Community agreement and role-only acceptance record |
-| `/calendar` | member | Events and RSVPs |
-| `/chat` | member | Encrypted member chat |
-| `/ai-chat` | member | One-on-one AI assistant; admins manage assistants in `/admin` |
-| `/community` | member | Shared gallery |
-| `/archive` | member | Protected archive collection plus uploaded archive |
-| `/shop` | member | Store items managed in the admin |
-| `/shop`, `/care` | member | Community store, zines, and consolidated community care, organizing, and education |
-
-`/events` redirects to `/calendar`; `/shop/success` to `/donate`; `/education` and `/organizing` redirect to `/care`; `/zines` redirects to `/shop`; legacy `*.html` URLs redirect to their App Router equivalents.
-
-## Auth model
-
-- One shared password per role, checked in `lib/passwords.ts` and signed into an http-only JWT (`lib/auth.ts`).
-- `middleware.ts` enforces access before a page renders and redirects to `/login?next=…` or `/admin-login?next=…`.
-- Member and admin sessions are mutually exclusive (`sw_auth` vs `sw_admin`).
-- Every data API re-checks the session server-side; writes to events, products, the gallery, and AI assistants require the admin role.
-
-### Admin-editable AI prompts
-
-Admins can create, edit, and delete named assistants in `/admin`; each has a name, a short description of who it is for, and its own system prompt. Members choose an assistant on `/ai-chat` and default to the built-in one.
-
-This changes the security impact of the shared admin password: it now controls not just content and store data but **what every member's assistant says**. Anyone who obtains the admin password can change assistant behavior for all members, including instructions that weaken the tone or focus of replies. Treat that password as control over member-facing AI behavior, rotate it if it may have leaked (sessions are revoked when it changes), and do not share it more widely than necessary.
-
-Prompt-level guardrails are mitigation only. The server prepends the Anchor / Mirror / Reframe / Rapport block, the trauma-informed commitments (dignity, autonomy, human rights; individual experience versus broader claims), and the hard limits (no diagnosis, not a therapist, crisis resources) to every agent prompt on every request, and agent prompts are validated and length-limited server-side. That does **not** guarantee the model follows them and is **not a verified reduction in bias or hallucination**. Model output can still be wrong, biased, or unsafe; prompts are not automatically safety-reviewed. The `/ai-chat` page keeps its crisis resources and "not a therapist" disclosure visible regardless of which assistant is selected.
-
-## Data
-
-Firestore collections: `posts` (with a `replies` subcollection), `messages`, `events`, `products`, `galleryAssets`, `aiAgents` (admin-managed assistant definitions), `reports` (admin-only queue with audit subcollections), and `communityAgreementAcceptances` (role and acceptance time only). Files uploaded to Firebase Storage through `/api/upload` are served through authenticated `/api/storage` URLs. Uploading archive, community, and product files is admin-only; signed-in members can read them. Existing objects may retain public access and must be reviewed with the Firebase owner; see the [deployment runbook](./docs/deployment-runbook.md).
-
-Reports are not exposed through member-facing list APIs. Only admins can read or change report status; the report stores the shared-role label, target references, reason, optional details, and resolution audit trail, but no public member identity or IP address. Agreement acceptance likewise stores only role and version/time, not a public profile.
-
-Chat messages are encrypted in the browser with a shared room key derived from `AUTH_SECRET`. The server and every signed-in member can derive the key, so this is not end-to-end encryption and should not be used for confidential messages.
-
-Archive images are stored outside `public/` and streamed by an authenticated API route; do not make those assets public or expose them through a separate CDN origin.
-
-Event RSVP records are idempotent and keyed by role. Since member and admin accounts use shared passwords, RSVPs do not identify individual attendees and must not be treated as an attendee roster.
-
-Calendar exports intentionally use all-day dates in `America/Denver`; event times remain visible on the site but are not included in exported calendar entries.
-
-## Tests
+Copy the placeholder file:
 
 ```bash
-npm test                    # unit tests (vitest), including agent validation and admin-only route access
-npm run test:e2e            # Playwright; login-flow tests need configured passwords and Firebase
-npm run test:a11y           # axe-core checks, including protected pages with test-only auth
-npm run test:responsive     # layout checks
+cp .env.example .env.local
 ```
 
-The Playwright config builds and starts the app automatically. CI uses a test-only signing secret and signed test cookies for protected routes; no production credentials are required.
+Set values locally as documented in `.env.example`. Never commit actual passwords, signing secrets, service-account keys, or API keys.
 
-## Development sequence
+### Run
 
-1. Understand the existing architecture — completed.
-2. Improve the Bulletin layout — completed.
-3. Add categories for existing discussions — completed.
-4. Add persistent individual thread pages — completed.
-5. Add pagination and search — planned after thread routes.
-6. Establish community agreements — completed.
-7. Build reporting and moderation workflows — initial implementation completed.
-8. Evaluate individual member accounts — defer until the community requires individual identity and permissions.
-9. Complete independent testing and deployment review — in progress.
+```bash
+npm run dev
+```
 
-### Project constraints
+The development server uses `http://localhost:3000` by default.
 
-- Preserve accessible mobile layouts.
-- Preserve compatibility with existing Firestore posts and reply subcollections.
-- Keep the shared-member and organizer authentication model.
-- Do not add an external search dependency.
-- Do not create public member profiles.
-- Make surgical changes instead of replacing working systems.
+### Available checks
 
-## Deployment
+```bash
+npm run lint
+npx tsc --noEmit
+npm test
+npm run build
+npm run test:e2e
+npm run test:a11y
+npm run test:responsive
+npm run test:all
+npm start
+```
 
-The app requires a Node.js/Next.js server runtime (Node.js 22 or newer); it is not configured for static export. GitHub Actions runs lint, type-check, unit tests, production build, Playwright, and protected-page accessibility checks for pull requests and pushes to `main`, but does not deploy. The intended host is Apify, but the checked-in `amplify.yml` and [deployment runbook](docs/deployment-runbook.md) describe AWS Amplify; `APIFY_API_TOKEN` is not hosting configuration. Resolve this mismatch and verify the host supports the required runtime before deployment. Porkbun DNS setup must wait until the selected host provides its exact records.
+`npm run test:all` runs unit tests followed by Playwright end-to-end tests.
 
-## Follow-up TODOs
+Playwright builds and starts the application itself unless `SKIP_WEBSERVER` is set. Login tests need authorized test passwords and Firestore configuration when exercising real password and rate-limit flows.
 
-The code-review items previously listed here have been implemented. Complete these account-owner and deployment tasks in order:
+## Environment variables
 
-1. **Confirm the hosting architecture.** Apify is the intended host, but no Apify deployment configuration exists in this repository; the checked-in Amplify build spec and runbook are AWS Amplify-specific. Verify that the chosen Apify service can run this Next.js SSR app, API routes, middleware, and Node.js 22, and can supply server-only secrets at runtime. If not, select a compatible host. Update the deployment configuration and runbook to match before connecting production traffic.
-2. **Provision member and admin sign-in.** Set distinct, strong `MEMBER_PASSWORD` and `ADMIN_PASSWORD` values and a high-entropy `AUTH_SECRET` in the host's server-side secret store; never use `NEXT_PUBLIC_*` variables or expose secrets in preview builds, logs, or downloadable artifacts. Confirm the shared-password-per-role model is acceptable: it does not identify individual members or admins. Test anonymous redirects, member access without admin access, admin access, logout, session expiration/revocation, secure role-separated cookies, and login rate limits before launch.
-3. **Prepare Firebase.** With the Firebase owner, confirm the production project, Firestore, and Storage are enabled. Provide the server-side Firebase Admin project ID, service-account email/private key, and bucket name with least-privilege IAM access. Configure TTL for `internal_login_rate_limits.expiresAt`, validate trusted proxy address handling, and test required API reads/writes using non-production data. Firebase Admin bypasses client Security Rules, so do not broaden service-account permissions to work around failures.
-4. **Review stored media and API behavior.** Inventory existing Storage objects and public access; back up and approve any migration before changing production objects. Verify new uploads remain private and authenticated media routes work for intended roles. Product cleanup cannot be atomic across Storage and Firestore: if Storage deletion succeeds but a Firestore write fails, the API reports the partial state and metadata may need manual repair. Define an owner-visible recovery procedure for that case.
-5. **Configure optional integrations only when enabled.** Set `MISTRAL_API_KEY` as a server-only secret only if enabling `/ai-chat`; retain the disclosure that submitted text is sent to Mistral in plaintext and is not end-to-end encrypted. `APIFY_API_TOKEN` is unused by the current app; configure it only if an Apify-backed feature is implemented.
-6. **Gate production deploys.** Require the CI checks before merging to the production branch. Keep production credentials out of untrusted pull-request previews. Deploy first to the host's default URL and verify Node.js 22, server-side secret access, protected pages, APIs, Firebase, and private media before attaching the custom domain.
-7. **Configure Porkbun after the host is verified.** Inspect and save the current DNS zone first. Use only the exact domain-validation and routing records supplied by the selected host; do not guess record values or change nameservers. Preserve MX, mail-related TXT, and unrelated verification records. Verify DNS, TLS, HTTPS redirects, and apex/`www` canonical behavior after propagation.
-8. **Record go-live and rollback checks.** Confirm member/admin access boundaries, protected API behavior, Firebase operations, media privacy, domain routing, and absence of secrets in browser bundles/logs. Document the last-known-good deployment and rollback steps before announcing the site.
+### Application authentication
 
-Post images are uploaded as part of post creation and stored under a server-generated, post-specific path. Legacy images in the former shared `posts/` folder are retained on post deletion to avoid deleting an unrelated upload; clean those up separately if needed.
+| Variable | Required | Purpose |
+|---|---|---|
+| `AUTH_SECRET` | Yes | Signs session tokens and derives the password-version claim and chat room key |
+| `MEMBER_PASSWORD` | Yes | Shared password for member access |
+| `ADMIN_PASSWORD` | Yes | Shared password for organizer access |
 
-Legacy RSVP arrays are normalized the next time an event receives an RSVP. Product image cleanup applies to stored product paths and legacy `/api/storage` URLs; unrelated external image URLs are not deleted.
+There are deliberately no fallback passwords.
 
-Product image cleanup runs before product metadata changes because Firebase Storage and Firestore do not share a transaction. If Storage cleanup fails, the metadata change is not made; if the subsequent Firestore write fails, the API reports that the old image was already removed and metadata may need manual repair.
+### Firebase Admin
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `FIREBASE_PROJECT_ID` | For Firestore and Storage | Firebase project ID |
+| `FIREBASE_CLIENT_EMAIL` | For Firestore and Storage | Firebase Admin service-account email |
+| `FIREBASE_PRIVATE_KEY` | For Firestore and Storage | Firebase Admin private key; escaped `\n` values are converted in code |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | For uploads | Firebase Storage bucket name; public identifier, read by server code |
+
+Firebase Admin uses server-only credentials and bypasses Firebase client Security Rules.
+
+### Optional integrations
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `MISTRAL_API_KEY` | For `/ai-chat` | Server-only Mistral API key |
+| `MISTRAL_MODEL` | No | Mistral model name; defaults to `mistral-small-latest` |
+| `APIFY_API_TOKEN` | No | Reserved server-only token; no current application feature reads it |
+
+### Development and preview variables
+
+| Variable | Purpose |
+|---|---|
+| `BASE_URL` | Overrides the Playwright test base URL |
+| `SKIP_WEBSERVER` | Prevents Playwright from starting its own web server |
+| `BASE44_PREVIEW_MODE` | Enables Base44 sandbox preview origins |
+| `BASE44_PUBLIC_HOST_SUFFIX` | Supplies the preview origin suffix |
+
+Do not prefix passwords, signing secrets, Firebase private keys, or API keys with `NEXT_PUBLIC_`.
+
+## Firestore data
+
+The application code uses these collections:
+
+- `posts` and `posts/{id}/replies`
+- `messages`
+- `events`
+- `products`
+- `galleryAssets`
+- `aiAgents`
+- `internal_login_rate_limits`
+
+RSVP values are keyed by shared role rather than individual identity. Agreement acceptances store role and acceptance metadata, not public member profiles.
+
+## Testing and CI
+
+Vitest unit tests cover authentication helpers, password/session versions, login throttling, AI validation, storage paths, calendar exports, and API route authorization.
+
+Playwright tests cover:
+
+- Public and protected route behavior
+- Member and administrator session boundaries
+- Responsive layouts
+- Accessibility with axe-core
+- Archive and upload restrictions
+- Admin-only actions
+- Navigation and focus behavior
+
+The CI workflow in `.github/workflows/ci.yml` installs Node.js 22, dependencies, and browser runtimes, then runs lint, TypeScript, unit tests, a production build, E2E tests, and protected-page accessibility tests.
+
+Passing local or CI checks does not verify live Firebase, Mistral, DNS, TLS, hosting, or production Storage ACL configuration.
+
+## Deployment and hosting status
+
+The application requires a Next.js server runtime and is not configured for static export. It uses middleware and Node.js API routes, so a static-only host is insufficient.
+
+`amplify.yml` describes an AWS Amplify build and publishes `.next`, but no live Amplify application or deployment is established by the repository. The README and deployment runbook also identify Apify as an intended host, while no Apify deployment configuration exists. Hosting selection remains unresolved until the account owner verifies the runtime and secret-store approach.
+
+The repository includes deployment documentation in [docs/deployment-runbook.md](docs/deployment-runbook.md). It does not prove a live deployment.
+
+Before production:
+
+1. Choose a compatible Next.js SSR host.
+2. Supply server-only secrets through the verified runtime.
+3. Configure and test Firebase, Firestore, and Storage access.
+4. Review legacy public Storage objects.
+5. Configure login rate-limit TTL in Firestore.
+6. Verify member/admin access, logout, media privacy, DNS, HTTPS, and rollback.
+
+## Contributing and maintenance
+
+1. Preserve the shared-password, role-separated authentication model unless requirements and security review explicitly change it.
+2. Keep API authorization server-side; do not rely only on middleware or hidden UI controls.
+3. Preserve existing Firestore fields and subcollections for compatibility.
+4. Do not make storage objects public or expose private member media.
+5. Keep validation at API boundaries.
+6. Run lint, type checking, unit tests, and the relevant build/browser tests.
+7. Treat hosting and production secrets as deployment configuration, not application changes.
+
+For route or feature changes, update the relevant API tests and browser coverage rather than weakening existing checks.
+
+## Security notes
+
+- Session cookies are HttpOnly and signed with `AUTH_SECRET`.
+- Password verification is constant-time.
+- Password rotation revokes prior sessions through password-version claims.
+- Member and admin cookies and roles are kept separate.
+- Protected APIs repeat session authorization.
+- Login rate limiting is backed by Firestore and fails closed if unavailable.
+- Admin-only operations require the admin role.
+- Uploaded files are type-, size-, folder-, and role-validated.
+- Private media retrieval requires a signed-in session.
+
+These controls have been implemented and partly tested locally. They are not evidence of a live production security audit.
