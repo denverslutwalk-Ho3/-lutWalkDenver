@@ -310,13 +310,16 @@ CI verifies the code only. It does not deploy, and passing local or CI checks do
 
 The application requires a Node.js/Next.js server runtime (Node.js 22 or newer); it is not configured for static export. There is no `output: 'export'`, no `next export` command, and no static `out/` artifact: middleware and the Node.js API routes need a server.
 
-Hosting is not resolved by this repository:
+The hosting target is **Vercel** (application hosting), with GitHub for source control, Firebase for Firestore and Storage, Porkbun for the domain, and Apify reserved for future automation:
 
-- **Apify is the intended host.** No Apify deployment configuration exists in this repository. Confirm the Apify service can run this Next.js SSR app — App Router, API routes, Node.js middleware, and Node.js 22 — and can supply server-only secrets at runtime. If it cannot, select a compatible host first.
-- **`amplify.yml` and [`docs/deployment-runbook.md`](docs/deployment-runbook.md) describe AWS Amplify**, not Apify. The build spec publishes the `.next` SSR artifact, and the runbook covers Amplify compute, secrets, Firebase, Porkbun DNS, verification, and rollback. No Amplify app, GitHub connection, or deployment is established by the repository.
-- `APIFY_API_TOKEN` is a reserved token for a future Apify-backed feature; it is not hosting configuration.
+> GitHub → Vercel → Next.js application → Firebase and Apify
 
-Resolve this mismatch — either add Apify deployment configuration or adopt the Amplify runbook — and verify the chosen host supports the required runtime before connecting production traffic. Porkbun DNS changes must wait until the selected host supplies its exact domain-validation and routing records; do not guess record values or change nameservers.
+- The application needs no Vercel-specific configuration: Vercel detects Next.js, and the existing `next.config.mjs` redirects and security headers apply unchanged. There is deliberately no `vercel.json`, no build adapter, and no static-export setting — middleware and the Node.js API routes need the server runtime Vercel provides (`amplify.yml` is retained but unused; do not connect the repository to AWS Amplify).
+- The app is compatible with Vercel because the middleware already runs on the Node.js runtime (stable in Next.js 15.5), the Firebase Admin server code stays in Node.js API routes, and `outputFileTracingIncludes` keeps archive media inside the authenticated server route.
+- Vercel serves project environment variables to the server runtime directly, so the build-time variable workaround described previously for AWS Amplify does not apply; configure secrets in the Vercel dashboard instead (see [`docs/deployment-runbook.md`](docs/deployment-runbook.md)).
+- `APIFY_API_TOKEN` is a reserved token for a future Apify-backed feature; it is not hosting configuration, and no current application code reads it.
+
+**Connection, deployment, domain, and DNS setup are account-owner tasks documented in the runbook** — connecting the GitHub repository to Vercel, setting environment variables, using the exact DNS records Vercel displays for Porkbun, and verifying HTTPS. Porkbun DNS changes must wait until Vercel supplies its records; do not guess record values or change nameservers.
 
 No production deployment exists today. Nothing in this repository proves the app is deployed, and no custom domain is attached.
 
@@ -324,7 +327,7 @@ No production deployment exists today. Nothing in this repository proves the app
 
 Account-owner and deployment tasks, in order:
 
-1. **Confirm the hosting architecture.** Verify that the intended Apify service can run this Next.js SSR app and provide server-only secrets at runtime, then update the deployment configuration and runbook to match. If it cannot, select a compatible host first.
+1. **Connect the repository to Vercel and verify the deployed runtime.** Follow the connect-deploy steps in [`docs/deployment-runbook.md`](docs/deployment-runbook.md): import the repository with the production branch `main`, configure environment variables in the Vercel dashboard, deploy first to the provided `*.vercel.app` domain, and verify protected pages, server-side secret access, Node.js 22, and Firestore/Storage reachability before touching DNS.
 2. **Provision member and admin sign-in.** Set distinct, strong `MEMBER_PASSWORD` and `ADMIN_PASSWORD` values and a high-entropy `AUTH_SECRET` in the host's server-side secret store; never use `NEXT_PUBLIC_*` variables or expose secrets in preview builds, logs, or downloadable artifacts. Treat any shared password that has been sent through chat, email, or a plaintext document as exposed and replace it before launch. Confirm the shared-password-per-role model is acceptable: it does not identify individual members or admins. Test anonymous redirects, member access without admin access, admin access, logout, session expiration and revocation, role-separated cookies, and login rate limits before launch.
 3. **Prepare Firebase.** With the Firebase owner, confirm the production project, Firestore, and Storage are enabled. Provide the server-side Firebase Admin project ID, service-account email and private key, and bucket name with least-privilege IAM access. Configure TTL for `internal_login_rate_limits.expiresAt`, validate trusted proxy address handling, and test required API reads and writes with non-production data. Firebase Admin bypasses client Security Rules, so do not broaden service-account permissions to work around failures.
 4. **Review stored media and API behavior.** Inventory existing Storage objects and public access; back up and approve any migration before changing production objects. Verify new uploads remain private and authenticated media routes work for the intended roles. Define an owner-visible recovery procedure for the partial-failure case described under stored media behavior.
@@ -347,7 +350,7 @@ For route or feature changes, update the relevant API tests and browser coverage
 
 ## Documentation
 
-- [`docs/deployment-runbook.md`](docs/deployment-runbook.md) — AWS Amplify deployment preparation, secret handling, Firebase readiness, Porkbun DNS, verification, and rollback
+- [`docs/deployment-runbook.md`](docs/deployment-runbook.md) — Vercel deployment runbook: GitHub↔Vercel connection, secret handling, Firebase readiness, Porkbun DNS, verification, troubleshooting, and rollback
 - [`docs/project-inventory/00-index.md`](docs/project-inventory/00-index.md) — full project inventory: overview, file and folder inventory, feature inventory, route and API reference, data flow, auth and security, dependency reference, architecture diagrams, maintenance register, and a beginner guide
 - [`AGENTS.md`](AGENTS.md) — operating standard and verification commands for anyone changing the repository
 - [`LICENSE.txt`](LICENSE.txt) — license and terms of use
