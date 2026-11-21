@@ -38,7 +38,7 @@ External integrations implemented in the source include Firebase Admin with Clou
 
 ### Member community
 
-- Bulletin posts, categories, searches, pinned posts, replies, and reports
+- Bulletin posts, pinned posts, and replies
 - Persistent individual discussion pages
 - Shared encrypted-in-browser chat
 - Community calendar and role-level RSVPs
@@ -64,9 +64,9 @@ The `/admin` route provides organizer controls for:
 
 Public routes include `/`, `/about`, `/donate`, `/privacy`, `/terms`, `/accessibility`, `/login`, and `/admin-login`.
 
-Protected member/admin routes include `/care`, `/archive`, `/bulletin`, `/bulletin/[id]`, `/calendar`, `/chat`, `/ai-chat`, `/community`, `/community-agreement`, and `/shop`.
+Protected member/admin routes include `/care`, `/archive`, `/bulletin`, `/calendar`, `/chat`, `/ai-chat`, `/community`, `/education`, `/organizing`, `/shop`, and `/zines`.
 
-`/admin` is administrator-only. `/education` and `/organizing` redirect to `/care`; `/zines` redirects to `/shop`; `/events` redirects to `/calendar`; and `/shop/success` redirects to `/donate`.
+`/admin` is administrator-only. `/events` redirects to `/calendar`, `/shop/success` redirects to `/donate`, and legacy `.html` routes redirect to their App Router equivalents.
 
 ## Architecture
 
@@ -230,8 +230,6 @@ The application code uses these collections:
 - `products`
 - `galleryAssets`
 - `aiAgents`
-- `reports` and `reports/{id}/audit`
-- `communityAgreementAcceptances`
 - `internal_login_rate_limits`
 
 RSVP values are keyed by shared role rather than individual identity. Agreement acceptances store role and acceptance metadata, not public member profiles.
