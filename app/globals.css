@@ -745,6 +745,60 @@ input[type="file"] {
   padding-top: 12px;
 }
 
+.forum-orientation__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.forum-orientation__grid p {
+  margin: 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(246, 238, 225, 0.05);
+}
+
+.post__meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.category-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--gold);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.reply__header,
+.reply-form__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.reply-delete {
+  min-height: 44px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid rgba(179, 38, 30, 0.65);
+  color: #e9a39d;
+  font-size: 0.78rem;
+}
+
+.reply-form__footer .muted {
+  margin: 0;
+}
+
 /* ── Calendar ──────────────────────────────────────────────────────────── */
 
 .cal-nav {
@@ -1080,6 +1134,31 @@ input[type="file"] {
 @media (max-width: 640px) {
   .shell {
     padding: 20px 16px 40px;
+  }
+
+  .forum-orientation__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .post {
+    padding: 16px;
+  }
+
+  .post__meta {
+    justify-content: flex-start;
+  }
+
+  .category-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .category-btn {
+    width: 100%;
+  }
+
+  .post__actions .btn {
+    flex: 1 1 140px;
   }
 
   .site-header__inner {

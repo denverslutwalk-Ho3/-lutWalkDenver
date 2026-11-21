@@ -5,6 +5,7 @@ import { FieldValue, type QueryDocumentSnapshot } from 'firebase-admin/firestore
 import { readBodyWithinLimit } from '../../../lib/bounded-body';
 import { deleteStorageObject } from '../../../lib/storage-cleanup';
 import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_FILE_SIZE, MAX_UPLOAD_REQUEST_SIZE } from '../../../lib/upload-constraints';
+import { isForumCategory, normalizeForumCategory } from '../../../lib/forum-categories';
 
 export async function GET(request: Request) {
   if (!(await requireMemberOrAdmin())) {
@@ -26,7 +27,17 @@ export async function GET(request: Request) {
     const posts = snap.docs.map((doc: QueryDocumentSnapshot) => {
       const post: Record<string, unknown> & { id: string } = { id: doc.id, ...doc.data() };
       delete post.storageOwnerHash;
+      post.category = normalizeForumCategory(post.category);
       return post;
+    }).sort((a, b) => {
+      if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
+      const aSeconds = typeof a.createdAt === 'object' && a.createdAt && '_seconds' in a.createdAt
+        ? Number((a.createdAt as { _seconds: number })._seconds)
+        : 0;
+      const bSeconds = typeof b.createdAt === 'object' && b.createdAt && '_seconds' in b.createdAt
+        ? Number((b.createdAt as { _seconds: number })._seconds)
+        : 0;
+      return bSeconds - aSeconds;
     });
     return NextResponse.json({ posts });
   } catch (err) {
@@ -62,6 +73,7 @@ export async function POST(request: Request) {
     const contentType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
     let titleValue: unknown;
     let textValue: unknown;
+    let categoryValue: unknown = 'general';
     let file: File | null = null;
     if (contentType === 'multipart/form-data') {
       const formData = await boundedRequest.formData();
@@ -70,6 +82,7 @@ export async function POST(request: Request) {
       }
       titleValue = formData.get('title');
       textValue = formData.get('text');
+      categoryValue = formData.get('category');
       const fileField = formData.get('file');
       if (fileField !== null && !(fileField instanceof File)) {
         return NextResponse.json({ error: 'Invalid post image' }, { status: 400 });
@@ -86,18 +99,23 @@ export async function POST(request: Request) {
       }
       titleValue = json.title;
       textValue = json.text;
+      categoryValue = json.category;
     } else {
       return NextResponse.json({ error: 'Expected JSON or multipart form data' }, { status: 415 });
     }
 
     const title = typeof titleValue === 'string' ? titleValue.trim() : '';
     const text = typeof textValue === 'string' ? textValue.trim() : '';
+    const category = typeof categoryValue === 'string' ? categoryValue : 'general';
 
     if (!title || !text) {
       return NextResponse.json({ error: 'title and text are required' }, { status: 400 });
     }
     if (title.length > 200 || text.length > 10000) {
       return NextResponse.json({ error: 'Post is too long' }, { status: 400 });
+    }
+    if (category !== 'general' && !isForumCategory(category)) {
+      return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
     }
     if (file && file.size > MAX_UPLOAD_FILE_SIZE) {
       return NextResponse.json({ error: 'File exceeds 10 MB limit' }, { status: 413 });
@@ -134,6 +152,7 @@ export async function POST(request: Request) {
       await ref.set({
         title,
         text,
+        category,
         imageUrl,
         storagePath,
         pinned: false,
