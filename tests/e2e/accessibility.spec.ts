@@ -20,6 +20,7 @@ const PROTECTED_PAGES = [
   { name: 'chat', url: '/chat' },
   { name: 'calendar', url: '/calendar' },
   { name: 'community', url: '/community' },
+  { name: 'community-agreement', url: '/community-agreement' },
   { name: 'zines', url: '/zines' },
   { name: 'archive', url: '/archive' },
 ];

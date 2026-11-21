@@ -9,6 +9,11 @@ import {
   normalizeForumCategory,
   type ForumCategory,
 } from '../../lib/forum-categories';
+import {
+  REPORT_REASONS,
+  REPORT_REASON_LABELS,
+  type ReportReason,
+} from '../../lib/reporting';
 
 type Thread = {
   id: string;
@@ -60,6 +65,15 @@ export default function BulletinPage() {
   const [openReplies, setOpenReplies] = useState<Record<string, Reply[]>>({});
   const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
   const [replyStatus, setReplyStatus] = useState<Record<string, string>>({});
+  const [reportTarget, setReportTarget] = useState<{
+    targetType: 'post' | 'reply';
+    targetId: string;
+    parentPostId?: string;
+  } | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReason>('harassment');
+  const [reportDetails, setReportDetails] = useState('');
+  const [reportStatus, setReportStatus] = useState('');
+  const [reportError, setReportError] = useState(false);
   const postedRef = useRef(false);
 
   const loadRole = useCallback(async () => {
@@ -256,6 +270,36 @@ export default function BulletinPage() {
     }
   };
 
+  const submitReport = async () => {
+    if (!reportTarget) return;
+    setReportError(false);
+    setReportStatus('Submitting report…');
+    try {
+      const response = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          ...reportTarget,
+          reason: reportReason,
+          details: reportDetails.trim(),
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        setReportError(true);
+        setReportStatus(data?.error ?? 'The report could not be submitted.');
+        return;
+      }
+      setReportStatus('Report submitted privately to organizers.');
+      setReportDetails('');
+      setReportTarget(null);
+    } catch {
+      setReportError(true);
+      setReportStatus('The report could not be submitted. Check your connection.');
+    }
+  };
+
   const copyThreadLink = async (threadId: string) => {
     const url = `${window.location.origin}/bulletin#thread-${threadId}`;
     try {
@@ -409,6 +453,47 @@ export default function BulletinPage() {
           <p>No discussions in this category yet. Start the first one above.</p>
         )}
 
+        {reportTarget && (
+          <form
+            className="report-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitReport();
+            }}
+          >
+            <h3>Report {reportTarget.targetType}</h3>
+            <label htmlFor="report-reason">Reason</label>
+            <select
+              id="report-reason"
+              value={reportReason}
+              onChange={(event) => setReportReason(event.target.value as ReportReason)}
+            >
+              {REPORT_REASONS.map((reason) => (
+                <option key={reason} value={reason}>{REPORT_REASON_LABELS[reason]}</option>
+              ))}
+            </select>
+            <label htmlFor="report-details">Details (optional)</label>
+            <textarea
+              id="report-details"
+              rows={3}
+              maxLength={2000}
+              value={reportDetails}
+              onChange={(event) => setReportDetails(event.target.value)}
+            />
+            <div className="report-form__actions">
+              <button type="submit" className="btn btn-danger">Submit private report</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setReportTarget(null)}>
+                Cancel
+              </button>
+            </div>
+            {reportStatus && (
+              <p className={reportError ? 'form-message form-message--error' : 'form-message'} role={reportError ? 'alert' : 'status'}>
+                {reportStatus}
+              </p>
+            )}
+          </form>
+        )}
+
         <div className="post-list">
           {[...pinnedPosts, ...regularPosts].map((post) => (
             <article className="post" id={`thread-${post.id}`} key={post.id}>
@@ -450,6 +535,16 @@ export default function BulletinPage() {
                 </button>
                 <button
                   type="button"
+                  className="btn btn-danger"
+                  onClick={() => {
+                    setReportStatus('');
+                    setReportTarget({ targetType: 'post', targetId: post.id });
+                  }}
+                >
+                  Report post
+                </button>
+                <button
+                  type="button"
                   className="btn btn-secondary"
                   onClick={() => void loadReplies(post.id)}
                 >
@@ -474,15 +569,31 @@ export default function BulletinPage() {
                     <div className="reply" key={reply.id}>
                       <div className="reply__header">
                         <small>{reply.sender || 'Member'} · {formatTimestamp(reply.createdAt)}</small>
-                        {role === 'admin' && (
+                        <div className="reply__actions">
                           <button
                             type="button"
-                            className="reply-delete"
-                            onClick={() => void deleteReply(post.id, reply.id)}
+                            className="reply-report"
+                            onClick={() => {
+                              setReportStatus('');
+                              setReportTarget({
+                                targetType: 'reply',
+                                targetId: reply.id,
+                                parentPostId: post.id,
+                              });
+                            }}
                           >
-                            Delete reply
+                            Report
                           </button>
-                        )}
+                          {role === 'admin' && (
+                            <button
+                              type="button"
+                              className="reply-delete"
+                              onClick={() => void deleteReply(post.id, reply.id)}
+                            >
+                              Delete reply
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <p>{reply.text}</p>
                     </div>

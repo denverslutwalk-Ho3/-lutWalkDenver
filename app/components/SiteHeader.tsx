@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: '/care', label: 'Care' },
   { href: '/community', label: 'Gallery' },
   { href: '/bulletin', label: 'Bulletin' },
+  { href: '/community-agreement', label: 'Agreement' },
   { href: '/calendar', label: 'Calendar' },
   { href: '/chat', label: 'Chat' },
   { href: '/ai-chat', label: 'AI Chat' },

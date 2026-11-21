@@ -15,6 +15,14 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const limitParam = Number(searchParams.get('limit') ?? '20');
   const limit = Math.min(Math.max(1, limitParam), 100);
+  const categoryParam = searchParams.get('category');
+  const queryParam = searchParams.get('q')?.trim() ?? '';
+  if (categoryParam && categoryParam.length > 50) {
+    return NextResponse.json({ error: 'Invalid category filter' }, { status: 400 });
+  }
+  if (queryParam.length > 200) {
+    return NextResponse.json({ error: 'Search query is too long' }, { status: 400 });
+  }
 
   try {
     const db = getAdminDb();
@@ -29,6 +37,20 @@ export async function GET(request: Request) {
       delete post.storageOwnerHash;
       post.category = normalizeForumCategory(post.category);
       return post;
+    }).filter((post) => {
+      if (categoryParam && categoryParam !== 'all') {
+        if (normalizeForumCategory(post.category) !== categoryParam) return false;
+      }
+      if (queryParam) {
+        const terms = queryParam.toLocaleLowerCase().split(/\s+/).filter(Boolean);
+        const searchable = [
+          typeof post.title === 'string' ? post.title : '',
+          typeof post.text === 'string' ? post.text : '',
+          typeof post.category === 'string' ? post.category : 'general',
+        ].join(' ').toLocaleLowerCase();
+        if (!terms.every((term) => searchable.includes(term))) return false;
+      }
+      return true;
     }).sort((a, b) => {
       if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
       const aSeconds = typeof a.createdAt === 'object' && a.createdAt && '_seconds' in a.createdAt
@@ -159,6 +181,7 @@ export async function POST(request: Request) {
         reactions: {},
         replyCount: 0,
         createdAt: FieldValue.serverTimestamp(),
+        lastActivityAt: FieldValue.serverTimestamp(),
       });
     } catch (err) {
       if (storagePath) {

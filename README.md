@@ -51,7 +51,8 @@ public/              favicon, icon, manifest, robots, sitemap, published media
 | `/login` | public | Member sign in |
 | `/admin-login` | public | Organizer sign in |
 | `/admin` | admin | Moderation, events, products, archive uploads |
-| `/bulletin` | member | Posts and replies |
+| `/bulletin` | member | Categorized discussions, replies, and private reports |
+| `/community-agreement` | member/admin | Community agreement and role-only acceptance record |
 | `/calendar` | member | Events and RSVPs |
 | `/chat` | member | Encrypted member chat |
 | `/ai-chat` | member | One-on-one AI assistant; admins manage assistants in `/admin` |
@@ -79,7 +80,9 @@ Prompt-level guardrails are mitigation only. The server prepends the Anchor / Mi
 
 ## Data
 
-Firestore collections: `posts` (with a `replies` subcollection), `messages`, `events`, `products`, `galleryAssets`, and `aiAgents` (admin-managed assistant definitions). Files uploaded to Firebase Storage through `/api/upload` are served through authenticated `/api/storage` URLs. Uploading archive, community, and product files is admin-only; signed-in members can read them. Existing objects may retain public access and must be reviewed with the Firebase owner; see the [deployment runbook](./docs/deployment-runbook.md).
+Firestore collections: `posts` (with a `replies` subcollection), `messages`, `events`, `products`, `galleryAssets`, `aiAgents` (admin-managed assistant definitions), `reports` (admin-only queue with audit subcollections), and `communityAgreementAcceptances` (role and acceptance time only). Files uploaded to Firebase Storage through `/api/upload` are served through authenticated `/api/storage` URLs. Uploading archive, community, and product files is admin-only; signed-in members can read them. Existing objects may retain public access and must be reviewed with the Firebase owner; see the [deployment runbook](./docs/deployment-runbook.md).
+
+Reports are not exposed through member-facing list APIs. Only admins can read or change report status; the report stores the shared-role label, target references, reason, optional details, and resolution audit trail, but no public member identity or IP address. Agreement acceptance likewise stores only role and version/time, not a public profile.
 
 Chat messages are encrypted in the browser with a shared room key derived from `AUTH_SECRET`. The server and every signed-in member can derive the key, so this is not end-to-end encryption and should not be used for confidential messages.
 

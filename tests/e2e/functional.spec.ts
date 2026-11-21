@@ -8,7 +8,7 @@ const PUBLIC_PAGES = ['/', '/about', '/login', '/donate', '/admin-login', '/priv
 
 const PROTECTED_ROUTES = [
   '/archive', '/bulletin', '/calendar', '/care', '/chat',
-  '/community', '/education', '/organizing', '/shop', '/zines',
+  '/community', '/community-agreement', '/education', '/organizing', '/shop', '/zines',
 ];
 
 test.describe('Public pages load', () => {
