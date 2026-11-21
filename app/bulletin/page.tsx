@@ -1,8 +1,20 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
+import {
+  FORUM_CATEGORIES,
+  FORUM_CATEGORY_LABELS,
+  normalizeForumCategory,
+  type ForumCategory,
+} from '../../lib/forum-categories';
+import {
+  REPORT_REASONS,
+  REPORT_REASON_LABELS,
+  type ReportReason,
+} from '../../lib/reporting';
 
 type Thread = {
   id: string;
@@ -11,6 +23,7 @@ type Thread = {
   imageUrl?: string | null;
   storagePath?: string | null;
   pinned?: boolean;
+  category?: ForumCategory | 'general';
   replyCount?: number;
   createdAt?: unknown;
 };
@@ -42,6 +55,8 @@ export default function BulletinPage() {
 
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
+  const [category, setCategory] = useState<ForumCategory>('announcements');
+  const [categoryFilter, setCategoryFilter] = useState<ForumCategory | 'general' | 'all'>('all');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState('');
   const [posting, setPosting] = useState(false);
@@ -51,6 +66,15 @@ export default function BulletinPage() {
   const [openReplies, setOpenReplies] = useState<Record<string, Reply[]>>({});
   const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
   const [replyStatus, setReplyStatus] = useState<Record<string, string>>({});
+  const [reportTarget, setReportTarget] = useState<{
+    targetType: 'post' | 'reply';
+    targetId: string;
+    parentPostId?: string;
+  } | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReason>('harassment');
+  const [reportDetails, setReportDetails] = useState('');
+  const [reportStatus, setReportStatus] = useState('');
+  const [reportError, setReportError] = useState(false);
   const postedRef = useRef(false);
 
   const loadRole = useCallback(async () => {
@@ -102,6 +126,7 @@ export default function BulletinPage() {
   const resetForm = () => {
     setTitle('');
     setText('');
+    setCategory('announcements');
     setImageFile(null);
     setImagePreview('');
     postedRef.current = false;
@@ -121,6 +146,7 @@ export default function BulletinPage() {
     const formData = new FormData();
     formData.append('title', cleanTitle);
     formData.append('text', cleanText);
+    formData.append('category', category);
     if (imageFile) formData.append('file', imageFile);
     try {
       const response = await fetch('/api/posts', {
@@ -150,7 +176,7 @@ export default function BulletinPage() {
     }
   };
 
-  const loadReplies = async (threadId: string) => {
+  const loadReplies = useCallback(async (threadId: string) => {
     setReplyStatus((prev) => ({ ...prev, [threadId]: 'Loading replies…' }));
     try {
       const response = await fetch(`/api/posts/${threadId}/replies`, { credentials: 'include' });
@@ -164,7 +190,7 @@ export default function BulletinPage() {
     } catch {
       setReplyStatus((prev) => ({ ...prev, [threadId]: 'Replies could not be loaded.' }));
     }
-  };
+  }, []);
 
   const addReply = async (threadId: string) => {
     const value = (replyInputs[threadId] ?? '').trim();
@@ -227,16 +253,91 @@ export default function BulletinPage() {
     }
   };
 
+  const deleteReply = async (threadId: string, replyId: string) => {
+    if (!window.confirm('Delete this reply? This cannot be undone.')) return;
+    try {
+      const response = await fetch(`/api/posts/${threadId}/replies/${replyId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        setReplyStatus((prev) => ({ ...prev, [threadId]: 'The reply could not be deleted.' }));
+        return;
+      }
+      await loadReplies(threadId);
+      await loadPosts();
+    } catch {
+      setReplyStatus((prev) => ({ ...prev, [threadId]: 'The reply could not be deleted.' }));
+    }
+  };
+
+  const submitReport = async () => {
+    if (!reportTarget) return;
+    setReportError(false);
+    setReportStatus('Submitting report…');
+    try {
+      const response = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          ...reportTarget,
+          reason: reportReason,
+          details: reportDetails.trim(),
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        setReportError(true);
+        setReportStatus(data?.error ?? 'The report could not be submitted.');
+        return;
+      }
+      setReportStatus('Report submitted privately to organizers.');
+      setReportDetails('');
+      setReportTarget(null);
+    } catch {
+      setReportError(true);
+      setReportStatus('The report could not be submitted. Check your connection.');
+    }
+  };
+
+  const copyThreadLink = async (threadId: string) => {
+    const url = `${window.location.origin}/bulletin/${threadId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setReplyStatus((prev) => ({ ...prev, [threadId]: 'Thread link copied.' }));
+    } catch {
+      window.history.replaceState(null, '', `/bulletin/${threadId}`);
+      setReplyStatus((prev) => ({ ...prev, [threadId]: 'Link is in the address bar.' }));
+    }
+  };
+
+  const visiblePosts = posts.filter((post) => (
+    categoryFilter === 'all'
+      || normalizeForumCategory(post.category) === categoryFilter
+  ));
+  const pinnedPosts = visiblePosts.filter((post) => post.pinned);
+  const regularPosts = visiblePosts.filter((post) => !post.pinned);
+
   return (
     <main className="shell">
       <section className="hero" aria-labelledby="bulletin-title">
         <div className="hero-overlay">
-          <p className="eyebrow">Bulletin board</p>
-          <h1 id="bulletin-title">Announcements, requests, and updates.</h1>
+          <p className="eyebrow">Community forum</p>
+          <h1 id="bulletin-title">Community discussions.</h1>
           <p>
-            Post announcements, mutual aid requests, and volunteer needs. Replies are
-            visible to signed-in members only.
+            Share announcements, organize action, ask for mutual aid, and keep one another
+            informed. Discussions are visible to signed-in members only.
           </p>
+        </div>
+      </section>
+
+      <section className="featured forum-orientation" aria-labelledby="orientation-title">
+        <h2 id="orientation-title">Start here</h2>
+        <div className="forum-orientation__grid">
+          <p><strong>Choose a category</strong> so the right people can find a discussion.</p>
+          <p><strong>Be specific and kind.</strong> Share only what you are comfortable posting.</p>
+          <p><strong>Replies stay private.</strong> This area is for signed-in members, not public profiles.</p>
         </div>
       </section>
 
@@ -261,6 +362,19 @@ export default function BulletinPage() {
             onChange={(event) => setText(event.target.value)}
             required
           />
+
+          <label htmlFor="thread-category">Category</label>
+          <select
+            id="thread-category"
+            value={category}
+            onChange={(event) => setCategory(event.target.value as ForumCategory)}
+          >
+            {FORUM_CATEGORIES.map((option) => (
+              <option key={option} value={option}>
+                {FORUM_CATEGORY_LABELS[option]}
+              </option>
+            ))}
+          </select>
 
           <label htmlFor="thread-image">Photo (optional, up to 10 MB)</label>
           <input id="thread-image" type="file" accept="image/*" onChange={handleImageChange} />
@@ -297,21 +411,101 @@ export default function BulletinPage() {
           </button>
         </div>
 
+        <nav className="category-nav" aria-label="Forum categories">
+          <button
+            type="button"
+            className={`category-btn${categoryFilter === 'all' ? ' category-btn--active' : ''}`}
+            aria-pressed={categoryFilter === 'all'}
+            onClick={() => setCategoryFilter('all')}
+          >
+            All discussions
+          </button>
+          {FORUM_CATEGORIES.map((option) => (
+            <button
+              type="button"
+              key={option}
+              className={`category-btn${categoryFilter === option ? ' category-btn--active' : ''}`}
+              aria-pressed={categoryFilter === option}
+              onClick={() => setCategoryFilter(option)}
+            >
+              {FORUM_CATEGORY_LABELS[option]}
+            </button>
+          ))}
+          {posts.some((post) => normalizeForumCategory(post.category) === 'general') && (
+            <button
+              type="button"
+              className={`category-btn${categoryFilter === 'general' ? ' category-btn--active' : ''}`}
+              aria-pressed={categoryFilter === 'general'}
+              onClick={() => setCategoryFilter('general')}
+            >
+              General
+            </button>
+          )}
+        </nav>
+
         {loading && <p>Loading posts…</p>}
         {loadError && <p className="notice notice--error" role="alert">{loadError}</p>}
-        {!loading && !loadError && posts.length === 0 && (
-          <p>No posts yet. Start the first one above.</p>
+        {!loading && !loadError && visiblePosts.length === 0 && (
+          <p>No discussions in this category yet. Start the first one above.</p>
+        )}
+
+        {reportTarget && (
+          <form
+            className="report-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitReport();
+            }}
+          >
+            <h3>Report {reportTarget.targetType}</h3>
+            <label htmlFor="report-reason">Reason</label>
+            <select
+              id="report-reason"
+              value={reportReason}
+              onChange={(event) => setReportReason(event.target.value as ReportReason)}
+            >
+              {REPORT_REASONS.map((reason) => (
+                <option key={reason} value={reason}>{REPORT_REASON_LABELS[reason]}</option>
+              ))}
+            </select>
+            <label htmlFor="report-details">Details (optional)</label>
+            <textarea
+              id="report-details"
+              rows={3}
+              maxLength={2000}
+              value={reportDetails}
+              onChange={(event) => setReportDetails(event.target.value)}
+            />
+            <div className="report-form__actions">
+              <button type="submit" className="btn btn-danger">Submit private report</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setReportTarget(null)}>
+                Cancel
+              </button>
+            </div>
+            {reportStatus && (
+              <p className={reportError ? 'form-message form-message--error' : 'form-message'} role={reportError ? 'alert' : 'status'}>
+                {reportStatus}
+              </p>
+            )}
+          </form>
         )}
 
         <div className="post-list">
-          {posts.map((post) => (
-            <article className="post" key={post.id}>
+          {[...pinnedPosts, ...regularPosts].map((post) => (
+            <article className="post" id={`thread-${post.id}`} key={post.id}>
               <header className="post__header">
                 <h3>
                   {post.pinned && <span className="pin-badge">Pinned</span>}
-                  {post.title}
+                  <Link href={`/bulletin/${post.id}`}>{post.title}</Link>
                 </h3>
-                <span className="muted">{formatTimestamp(post.createdAt)}</span>
+                <div className="post__meta">
+                  <span className="category-badge">
+                    {post.category && post.category !== 'general'
+                      ? FORUM_CATEGORY_LABELS[normalizeForumCategory(post.category) as ForumCategory]
+                      : 'General'}
+                  </span>
+                  <span className="muted">{formatTimestamp(post.createdAt)}</span>
+                </div>
               </header>
 
               {post.imageUrl ? (
@@ -328,6 +522,23 @@ export default function BulletinPage() {
               <p className="post__body">{post.text}</p>
 
               <div className="post__actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => void copyThreadLink(post.id)}
+                >
+                  Copy link
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={() => {
+                    setReportStatus('');
+                    setReportTarget({ targetType: 'post', targetId: post.id });
+                  }}
+                >
+                  Report post
+                </button>
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -352,7 +563,34 @@ export default function BulletinPage() {
                   {openReplies[post.id].length === 0 && <p className="helper">No replies yet.</p>}
                   {openReplies[post.id].map((reply) => (
                     <div className="reply" key={reply.id}>
-                      <small>{reply.sender || 'Member'} · {formatTimestamp(reply.createdAt)}</small>
+                      <div className="reply__header">
+                        <small>{reply.sender || 'Member'} · {formatTimestamp(reply.createdAt)}</small>
+                        <div className="reply__actions">
+                          <button
+                            type="button"
+                            className="reply-report"
+                            onClick={() => {
+                              setReportStatus('');
+                              setReportTarget({
+                                targetType: 'reply',
+                                targetId: reply.id,
+                                parentPostId: post.id,
+                              });
+                            }}
+                          >
+                            Report
+                          </button>
+                          {role === 'admin' && (
+                            <button
+                              type="button"
+                              className="reply-delete"
+                              onClick={() => void deleteReply(post.id, reply.id)}
+                            >
+                              Delete reply
+                            </button>
+                          )}
+                        </div>
+                      </div>
                       <p>{reply.text}</p>
                     </div>
                   ))}
@@ -364,13 +602,17 @@ export default function BulletinPage() {
                 <textarea
                   id={`reply-${post.id}`}
                   rows={2}
+                  maxLength={4000}
                   value={replyInputs[post.id] ?? ''}
                   onChange={(event) => setReplyInputs((prev) => ({ ...prev, [post.id]: event.target.value }))}
                   placeholder="Write a reply…"
                 />
-                <button type="button" className="btn" onClick={() => void addReply(post.id)}>
-                  Reply
-                </button>
+                <div className="reply-form__footer">
+                  <button type="button" className="btn" onClick={() => void addReply(post.id)}>
+                    Reply
+                  </button>
+                  <small className="muted">{(replyInputs[post.id] ?? '').length}/4000</small>
+                </div>
                 {replyStatus[post.id] && <p className="helper">{replyStatus[post.id]}</p>}
               </div>
             </article>

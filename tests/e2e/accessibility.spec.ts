@@ -12,15 +12,13 @@ const PUBLIC_PAGES = [
 ];
 
 const PROTECTED_PAGES = [
-  { name: 'organizing', url: '/organizing' },
-  { name: 'education', url: '/education' },
   { name: 'care', url: '/care' },
   { name: 'shop', url: '/shop' },
   { name: 'bulletin', url: '/bulletin' },
   { name: 'chat', url: '/chat' },
   { name: 'calendar', url: '/calendar' },
   { name: 'community', url: '/community' },
-  { name: 'zines', url: '/zines' },
+  { name: 'community-agreement', url: '/community-agreement' },
   { name: 'archive', url: '/archive' },
 ];
 

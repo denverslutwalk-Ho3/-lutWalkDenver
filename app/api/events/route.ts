@@ -4,7 +4,8 @@ import { requireAdmin, requireMemberOrAdmin } from '../../../lib/authz';
 import { FieldValue, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 
 export async function GET(request: Request) {
-  if (!(await requireMemberOrAdmin())) {
+  const session = await requireMemberOrAdmin();
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -20,7 +21,9 @@ export async function GET(request: Request) {
       .limit(limit)
       .get();
 
-    const events = snap.docs.map((doc: QueryDocumentSnapshot) => ({ id: doc.id, ...doc.data() }));
+    const events = snap.docs
+      .map((doc: QueryDocumentSnapshot) => ({ id: doc.id, ...doc.data() } as { id: string; archived?: boolean }))
+      .filter((event) => session.role === 'admin' || event.archived !== true);
     return NextResponse.json({ events });
   } catch (err) {
     console.error('GET /api/events error:', err);
@@ -59,6 +62,7 @@ export async function POST(request: Request) {
       time,
       location,
       description,
+      archived: false,
       rsvps: [],
       createdAt: FieldValue.serverTimestamp(),
     });

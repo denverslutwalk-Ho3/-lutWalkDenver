@@ -5,12 +5,54 @@ export default function CarePage() {
     <main className="shell">
       <section className="hero" aria-labelledby="care-title">
         <div className="hero-overlay">
-          <p className="eyebrow">Care and support</p>
-          <h1 id="care-title">Care</h1>
+          <p className="eyebrow">Community care</p>
+          <h1 id="care-title">Organize, learn, and care.</h1>
           <p>
-            Ways to ask for help, offer help, and stay connected with people who share
-            the work.
+            Ways to get involved, learn together, preserve our history, and ask for
+            or offer support.
           </p>
+        </div>
+      </section>
+
+      <section className="featured" aria-labelledby="organizing-title">
+        <h2 id="organizing-title">Get involved</h2>
+        <div className="cards">
+          <article className="card">
+            <h3>Announcements and requests</h3>
+            <p>Read updates, post a need, or offer support to another member.</p>
+            <Link className="btn btn-secondary" href="/bulletin">Open the bulletin</Link>
+          </article>
+          <article className="card">
+            <h3>Events and volunteer shifts</h3>
+            <p>See what is coming up and RSVP so organizers can plan.</p>
+            <Link className="btn btn-secondary" href="/calendar">Open the calendar</Link>
+          </article>
+          <article className="card">
+            <h3>Coordinate in real time</h3>
+            <p>Use member chat for logistics, safety, and planning.</p>
+            <Link className="btn btn-secondary" href="/chat">Open member chat</Link>
+          </article>
+        </div>
+      </section>
+
+      <section className="featured" aria-labelledby="education-title">
+        <h2 id="education-title">Learn and preserve</h2>
+        <div className="cards">
+          <article className="card">
+            <h3>Zines</h3>
+            <p>Self-published work with stories, art, and analysis from the community.</p>
+            <Link className="btn btn-secondary" href="/shop">Browse zines</Link>
+          </article>
+          <article className="card">
+            <h3>Archive</h3>
+            <p>Flyers, photographs, and posters from past actions and events.</p>
+            <Link className="btn btn-secondary" href="/archive">Explore the archive</Link>
+          </article>
+          <article className="card">
+            <h3>Gallery</h3>
+            <p>Photos and materials shared by members.</p>
+            <Link className="btn btn-secondary" href="/community">View the gallery</Link>
+          </article>
         </div>
       </section>
 

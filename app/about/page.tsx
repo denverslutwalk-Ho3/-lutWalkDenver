@@ -36,7 +36,7 @@ export default function AboutPage() {
         </p>
         <div className="btn-row btn-row--start">
           <Link className="btn" href="/login">Member sign in</Link>
-          <Link className="btn btn-secondary" href="/organizing">See ways to help</Link>
+          <Link className="btn btn-secondary" href="/care">See ways to help</Link>
           <Link className="btn btn-secondary" href="/donate">Support the work</Link>
         </div>
       </section>

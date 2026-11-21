@@ -28,6 +28,7 @@ type AdminEvent = {
   time: string;
   location: string;
   description: string;
+  archived?: boolean;
 };
 
 type Product = {
@@ -64,10 +65,32 @@ type AiAgent = {
   builtIn?: boolean;
 };
 
+type ModerationReport = {
+  id: string;
+  targetType: 'post' | 'reply';
+  targetId: string;
+  parentPostId?: string | null;
+  reason: string;
+  details: string;
+  status: 'open' | 'reviewing' | 'resolved' | 'dismissed';
+  resolutionNotes: string;
+  reporterRole: 'member' | 'admin';
+  createdAt?: unknown;
+};
+
+function formatReportTimestamp(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'object' && '_seconds' in value) {
+    return new Date((value as { _seconds: number })._seconds * 1000).toLocaleString();
+  }
+  if (typeof value === 'string') return new Date(value).toLocaleString();
+  return '';
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function AdminDashboardPage() {
-  const [activeTab, setActiveTab] = useState<'stats' | 'moderation' | 'events' | 'products' | 'agents' | 'archive'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'moderation' | 'reports' | 'events' | 'products' | 'agents' | 'archive'>('stats');
 
   const [stats, setStats] = useState<Stats>({ posts: 0, events: 0, products: 0 });
   const [posts, setPosts] = useState<Post[]>([]);
@@ -75,6 +98,8 @@ export default function AdminDashboardPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [galleryAssets, setGalleryAssets] = useState<GalleryAsset[]>([]);
   const [agents, setAgents] = useState<AiAgent[]>([]);
+  const [reports, setReports] = useState<ModerationReport[]>([]);
+  const [reportStatus, setReportStatus] = useState('');
 
   // Event form
   const [evtTitle, setEvtTitle] = useState('');
@@ -114,12 +139,13 @@ export default function AdminDashboardPage() {
   // ── Data fetching ────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
-    const [postsRes, eventsRes, productsRes, galleryRes, agentsRes] = await Promise.allSettled([
+    const [postsRes, eventsRes, productsRes, galleryRes, agentsRes, reportsRes] = await Promise.allSettled([
       fetch('/api/posts?limit=50', { credentials: 'include' }),
       fetch('/api/events?limit=50', { credentials: 'include' }),
       fetch('/api/products', { credentials: 'include' }),
       fetch('/api/gallery?limit=80', { credentials: 'include' }),
       fetch('/api/ai-agents', { credentials: 'include' }),
+      fetch('/api/reports?limit=100', { credentials: 'include' }),
     ]);
 
     if (postsRes.status === 'fulfilled' && postsRes.value.ok) {
@@ -150,6 +176,12 @@ export default function AdminDashboardPage() {
     } else {
       setAgentStatus('Assistants could not be loaded. Check the Firebase configuration.');
     }
+    if (reportsRes.status === 'fulfilled' && reportsRes.value.ok) {
+      const json = await reportsRes.value.json() as { reports?: ModerationReport[] };
+      setReports(json.reports ?? []);
+    } else {
+      setReportStatus('Reports could not be loaded.');
+    }
   }, []);
 
   useEffect(() => { void loadData(); }, [loadData]);
@@ -179,6 +211,27 @@ export default function AdminDashboardPage() {
       return;
     }
     setPosts((prev) => prev.map((p) => p.id === post.id ? { ...p, pinned } : p));
+  };
+
+  const updateReport = async (
+    report: ModerationReport,
+    status: ModerationReport['status'],
+    resolutionNotes: string,
+  ) => {
+    setReportStatus('');
+    const response = await fetch(`/api/reports/${report.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ status, resolutionNotes }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null) as { error?: string } | null;
+      setReportStatus(data?.error ?? 'The report could not be updated.');
+      return;
+    }
+    setReportStatus('Report updated.');
+    await loadData();
   };
 
   // ── Events ───────────────────────────────────────────────────────────────
@@ -227,12 +280,28 @@ export default function AdminDashboardPage() {
   };
 
   const deleteEvent = async (id: string) => {
+    if (!window.confirm('Delete this event? This cannot be undone.')) return;
     const response = await fetch(`/api/events/${id}`, { method: 'DELETE', credentials: 'include' });
     if (!response.ok) {
       void loadData();
       return;
     }
     setEvents((prev) => prev.filter((e) => e.id !== id));
+  };
+
+  const archiveEvent = async (event: AdminEvent) => {
+    const archived = !event.archived;
+    const response = await fetch(`/api/events/${event.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ archived }),
+    });
+    if (!response.ok) {
+      void loadData();
+      return;
+    }
+    setEvents((prev) => prev.map((item) => item.id === event.id ? { ...item, archived } : item));
   };
 
   // ── Products ─────────────────────────────────────────────────────────────
@@ -449,6 +518,7 @@ export default function AdminDashboardPage() {
   const tabs: { key: typeof activeTab; label: string }[] = [
     { key: 'stats', label: 'Statistics' },
     { key: 'moderation', label: 'Moderation' },
+    { key: 'reports', label: 'Reports' },
     { key: 'events', label: 'Events' },
     { key: 'products', label: 'Products' },
     { key: 'agents', label: 'Agents' },
@@ -539,6 +609,69 @@ export default function AdminDashboardPage() {
           </>
         )}
 
+        {/* ── Reports ───────────────────────────────────────────────────── */}
+        {activeTab === 'reports' && (
+          <>
+            <h2>Restricted report queue</h2>
+            <p className="helper">Visible to organizers only. Resolution notes are retained in the audit record.</p>
+            {reportStatus && <p className="form-message" role="status">{reportStatus}</p>}
+            {reports.length === 0 && <p>No reports yet.</p>}
+            <div className="admin-list">
+              {reports.map((report) => (
+                <article key={report.id} className="admin-list-item">
+                  <div className="admin-list-meta">
+                    <strong>{report.reason.replaceAll('-', ' ')}</strong>
+                    <span className="muted"> · {report.status} · {report.targetType}</span>
+                    <span className="muted"> · {formatReportTimestamp(report.createdAt)}</span>
+                  </div>
+                  <p className="admin-list-body">
+                    <strong>Target:</strong> {report.parentPostId ? `${report.parentPostId} / ${report.targetId}` : report.targetId}
+                  </p>
+                  {report.details && <p className="admin-list-body">{report.details}</p>}
+                  {report.resolutionNotes && (
+                    <p className="admin-list-body"><strong>Resolution:</strong> {report.resolutionNotes}</p>
+                  )}
+                  <div className="admin-list-actions">
+                    {report.status === 'open' && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => void updateReport(report, 'reviewing', report.resolutionNotes)}
+                      >
+                        Mark reviewing
+                      </button>
+                    )}
+                    {report.status !== 'resolved' && report.status !== 'dismissed' && (
+                      <>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => {
+                            const notes = window.prompt('Resolution notes')?.trim();
+                            if (notes) void updateReport(report, 'resolved', notes);
+                          }}
+                        >
+                          Resolve
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger"
+                          onClick={() => {
+                            const notes = window.prompt('Dismissal notes')?.trim();
+                            if (notes) void updateReport(report, 'dismissed', notes);
+                          }}
+                        >
+                          Dismiss
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+
         {/* ── Events ───────────────────────────────────────────────────── */}
         {activeTab === 'events' && (
           <>
@@ -578,6 +711,7 @@ export default function AdminDashboardPage() {
                   <div className="admin-list-meta">
                     <strong>{ev.title}</strong>
                     <span className="muted"> · {ev.date}</span>
+                    {ev.archived && <span className="pin-badge">Archived</span>}
                   </div>
                   <p className="admin-list-body">{ev.location}</p>
                   <div className="admin-list-actions">
@@ -588,6 +722,13 @@ export default function AdminDashboardPage() {
                       aria-label={`Edit ${ev.title}`}
                     >
                       Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => void archiveEvent(ev)}
+                    >
+                      {ev.archived ? 'Restore' : 'Archive'}
                     </button>
                     <button
                       type="button"

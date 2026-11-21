@@ -52,7 +52,10 @@ export async function POST(
         sender,
         createdAt: FieldValue.serverTimestamp(),
       });
-      transaction.update(postRef, { replyCount: FieldValue.increment(1) });
+      transaction.update(postRef, {
+        replyCount: FieldValue.increment(1),
+        lastActivityAt: FieldValue.serverTimestamp(),
+      });
       return true;
     });
     if (!created) return NextResponse.json({ error: 'Post not found' }, { status: 404 });

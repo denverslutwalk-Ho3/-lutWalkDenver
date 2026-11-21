@@ -5,6 +5,7 @@ import { FieldValue, type QueryDocumentSnapshot } from 'firebase-admin/firestore
 import { readBodyWithinLimit } from '../../../lib/bounded-body';
 import { deleteStorageObject } from '../../../lib/storage-cleanup';
 import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_FILE_SIZE, MAX_UPLOAD_REQUEST_SIZE } from '../../../lib/upload-constraints';
+import { isForumCategory, normalizeForumCategory } from '../../../lib/forum-categories';
 
 export async function GET(request: Request) {
   if (!(await requireMemberOrAdmin())) {
@@ -14,6 +15,14 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const limitParam = Number(searchParams.get('limit') ?? '20');
   const limit = Math.min(Math.max(1, limitParam), 100);
+  const categoryParam = searchParams.get('category');
+  const queryParam = searchParams.get('q')?.trim() ?? '';
+  if (categoryParam && categoryParam.length > 50) {
+    return NextResponse.json({ error: 'Invalid category filter' }, { status: 400 });
+  }
+  if (queryParam.length > 200) {
+    return NextResponse.json({ error: 'Search query is too long' }, { status: 400 });
+  }
 
   try {
     const db = getAdminDb();
@@ -26,7 +35,31 @@ export async function GET(request: Request) {
     const posts = snap.docs.map((doc: QueryDocumentSnapshot) => {
       const post: Record<string, unknown> & { id: string } = { id: doc.id, ...doc.data() };
       delete post.storageOwnerHash;
+      post.category = normalizeForumCategory(post.category);
       return post;
+    }).filter((post) => {
+      if (categoryParam && categoryParam !== 'all') {
+        if (normalizeForumCategory(post.category) !== categoryParam) return false;
+      }
+      if (queryParam) {
+        const terms = queryParam.toLocaleLowerCase().split(/\s+/).filter(Boolean);
+        const searchable = [
+          typeof post.title === 'string' ? post.title : '',
+          typeof post.text === 'string' ? post.text : '',
+          typeof post.category === 'string' ? post.category : 'general',
+        ].join(' ').toLocaleLowerCase();
+        if (!terms.every((term) => searchable.includes(term))) return false;
+      }
+      return true;
+    }).sort((a, b) => {
+      if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
+      const aSeconds = typeof a.createdAt === 'object' && a.createdAt && '_seconds' in a.createdAt
+        ? Number((a.createdAt as { _seconds: number })._seconds)
+        : 0;
+      const bSeconds = typeof b.createdAt === 'object' && b.createdAt && '_seconds' in b.createdAt
+        ? Number((b.createdAt as { _seconds: number })._seconds)
+        : 0;
+      return bSeconds - aSeconds;
     });
     return NextResponse.json({ posts });
   } catch (err) {
@@ -62,6 +95,7 @@ export async function POST(request: Request) {
     const contentType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
     let titleValue: unknown;
     let textValue: unknown;
+    let categoryValue: unknown = 'general';
     let file: File | null = null;
     if (contentType === 'multipart/form-data') {
       const formData = await boundedRequest.formData();
@@ -70,6 +104,7 @@ export async function POST(request: Request) {
       }
       titleValue = formData.get('title');
       textValue = formData.get('text');
+      categoryValue = formData.get('category');
       const fileField = formData.get('file');
       if (fileField !== null && !(fileField instanceof File)) {
         return NextResponse.json({ error: 'Invalid post image' }, { status: 400 });
@@ -86,18 +121,23 @@ export async function POST(request: Request) {
       }
       titleValue = json.title;
       textValue = json.text;
+      categoryValue = json.category;
     } else {
       return NextResponse.json({ error: 'Expected JSON or multipart form data' }, { status: 415 });
     }
 
     const title = typeof titleValue === 'string' ? titleValue.trim() : '';
     const text = typeof textValue === 'string' ? textValue.trim() : '';
+    const category = typeof categoryValue === 'string' ? categoryValue : 'general';
 
     if (!title || !text) {
       return NextResponse.json({ error: 'title and text are required' }, { status: 400 });
     }
     if (title.length > 200 || text.length > 10000) {
       return NextResponse.json({ error: 'Post is too long' }, { status: 400 });
+    }
+    if (category !== 'general' && !isForumCategory(category)) {
+      return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
     }
     if (file && file.size > MAX_UPLOAD_FILE_SIZE) {
       return NextResponse.json({ error: 'File exceeds 10 MB limit' }, { status: 413 });
@@ -134,12 +174,14 @@ export async function POST(request: Request) {
       await ref.set({
         title,
         text,
+        category,
         imageUrl,
         storagePath,
         pinned: false,
         reactions: {},
         replyCount: 0,
         createdAt: FieldValue.serverTimestamp(),
+        lastActivityAt: FieldValue.serverTimestamp(),
       });
     } catch (err) {
       if (storagePath) {

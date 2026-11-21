@@ -25,13 +25,13 @@ export default function DonatePage() {
         <h2 id="resources-title">Other ways to help</h2>
         <ul className="plain-list">
           <li>
-            <Link href="/organizing">Volunteer with the collective</Link>
+            <Link href="/care">Volunteer with the collective</Link>
           </li>
           <li>
             <Link href="/bulletin">Offer supplies or mutual aid on the bulletin</Link>
           </li>
           <li>
-            <Link href="/zines">Submit or request a zine</Link>
+            <Link href="/shop">Submit or request a zine</Link>
           </li>
           <li>
             Email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> to ask where

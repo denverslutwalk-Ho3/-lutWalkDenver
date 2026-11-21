@@ -142,6 +142,18 @@ export default function ShopPage() {
         </div>
       </section>
 
+      <section className="featured" aria-labelledby="zines-title">
+        <h2 id="zines-title">Zines and submissions</h2>
+        <p>
+          Printed copies and zine submissions are coordinated by organizers. Email{' '}
+          <a href="mailto:denverslutwalk@proton.me">denverslutwalk@proton.me</a>{' '}
+          to submit work or request a print copy.
+        </p>
+        <div className="btn-row">
+          <Link className="btn btn-secondary" href="/archive">Browse the archive</Link>
+        </div>
+      </section>
+
       {selectedProduct && (
         <div
           className="modal-backdrop"

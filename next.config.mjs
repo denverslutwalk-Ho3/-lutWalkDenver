@@ -34,10 +34,10 @@ const nextConfig = {
       { source: '/bulletin.html', destination: '/bulletin', permanent: true },
       { source: '/calendar.html', destination: '/calendar', permanent: true },
       { source: '/community.html', destination: '/community', permanent: true },
-      { source: '/zine.html', destination: '/zines', permanent: true },
+      { source: '/zine.html', destination: '/shop', permanent: true },
       { source: '/admin-login.html', destination: '/admin-login', permanent: true },
-      { source: '/organizing.html', destination: '/organizing', permanent: true },
-      { source: '/education.html', destination: '/education', permanent: true },
+      { source: '/organizing.html', destination: '/care', permanent: true },
+      { source: '/education.html', destination: '/care', permanent: true },
       { source: '/care.html', destination: '/care', permanent: true },
       { source: '/privacy.html', destination: '/privacy', permanent: true },
       { source: '/terms.html', destination: '/terms', permanent: true },
@@ -46,6 +46,9 @@ const nextConfig = {
       { source: '/events', destination: '/calendar', permanent: true },
       { source: '/shop/success', destination: '/donate', permanent: true },
       { source: '/chatroom-spec', destination: '/chat', permanent: true },
+      { source: '/organizing', destination: '/care', permanent: true },
+      { source: '/education', destination: '/care', permanent: true },
+      { source: '/zines', destination: '/shop', permanent: true },
     ];
   },
 
@@ -77,10 +80,7 @@ const nextConfig = {
       '/care/:path*',
       '/chat/:path*',
       '/community/:path*',
-      '/education/:path*',
-      '/organizing/:path*',
       '/shop/:path*',
-      '/zines/:path*',
     ];
 
     return [
