@@ -42,6 +42,7 @@ The checked-in application currently uses:
 | Node.js | 22 or newer | Required server/runtime version |
 | npm | Lockfile v3 | Dependency installation and project scripts |
 | Firebase Admin | 14.5.1 | Server-side Firebase initialization, Firestore, and Storage access |
+| Firebase (Web SDK) | 13.4.0 | Client-side Firebase app initialization and analytics helper in `lib/firebase.ts`; not yet imported by any page or component |
 | Vitest | 5.1.0 | Unit and route tests |
 | Playwright | 1.65.1 | Browser, route, authentication, responsive, and accessibility tests |
 | axe-core through `@axe-core/playwright` | 4.14.0 | Automated accessibility checks |
@@ -49,7 +50,7 @@ The checked-in application currently uses:
 
 Versions above are the locked versions from `package-lock.json`, not only the ranges in `package.json`. Node 22 is pinned by `.nvmrc` and `package.json`'s `engines` field.
 
-The UI uses custom React components and custom CSS in `app/globals.css`. No separate UI component library or CSS framework is installed, and there is no Firebase client SDK: all Firebase access happens server-side through Firebase Admin.
+The UI uses custom React components and custom CSS in `app/globals.css`. No separate UI component library or CSS framework is installed. A Firebase Web SDK client module (`lib/firebase.ts`) initializes the `we-can-chat-13c4u` web project from its inline config and exposes an analytics helper, but no page or component imports it yet; all functional Firebase access still happens server-side through Firebase Admin. The client module's project ID is separate from the `FIREBASE_PROJECT_ID` environment variable used by the Admin SDK, and aligning them is an open follow-up.
 
 External integrations implemented in the source are Firebase Admin with Cloud Firestore and Firebase Storage, plus a server-to-Mistral HTTP API for `/ai-chat`. Their live availability is not established by this repository alone. `APIFY_API_TOKEN` appears only in `.env.example`; no application code reads it.
 
