@@ -69,5 +69,46 @@ describe('POST /api/auth/login', () => {
     const setCookie = response.headers.get('set-cookie') ?? '';
     expect(setCookie).toContain('sw_auth=signed-member-token');
     expect(setCookie).not.toContain('sw_admin=signed-member-token');
+    expect(setCookie).toMatch(/sw_admin=;.*Max-Age=0/i);
+  });
+
+  it('marks the member session cookie HttpOnly, SameSite=Lax, site-wide and Secure in production', async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env = { ...process.env, NODE_ENV: 'production' };
+    mocks.verifyMemberPassword.mockReturnValue(true);
+    mocks.signToken.mockReturnValue('signed-member-token');
+
+    try {
+      const response = await POST(new Request('http://localhost/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ password: 'authorized-test-password' }),
+        headers: { 'Content-Type': 'application/json' },
+      }));
+      const setCookie = response.headers.get('set-cookie') ?? '';
+
+      expect(setCookie).toMatch(/sw_auth=signed-member-token/);
+      expect(setCookie).toMatch(/HttpOnly/i);
+      expect(setCookie).toMatch(/SameSite=lax/i);
+      expect(setCookie).toMatch(/Path=\//i);
+      expect(setCookie).toMatch(/Secure/i);
+      expect(setCookie).toMatch(/Max-Age=2592000/i);
+    } finally {
+      process.env = { ...process.env, NODE_ENV: originalNodeEnv };
+    }
+  });
+
+  it('returns 429 with Retry-After once the rate limit is exceeded', async () => {
+    mocks.consumeLoginAttempt.mockResolvedValue({ allowed: false, retryAfterSeconds: 900 });
+
+    const response = await POST(new Request('http://localhost/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ password: 'authorized-test-password' }),
+      headers: { 'Content-Type': 'application/json' },
+    }));
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('retry-after')).toBe('900');
+    expect(mocks.verifyMemberPassword).not.toHaveBeenCalled();
+    expect(mocks.signToken).not.toHaveBeenCalled();
   });
 });
