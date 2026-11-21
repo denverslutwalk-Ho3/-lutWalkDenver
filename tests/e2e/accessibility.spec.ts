@@ -12,8 +12,6 @@ const PUBLIC_PAGES = [
 ];
 
 const PROTECTED_PAGES = [
-  { name: 'organizing', url: '/organizing' },
-  { name: 'education', url: '/education' },
   { name: 'care', url: '/care' },
   { name: 'shop', url: '/shop' },
   { name: 'bulletin', url: '/bulletin' },
@@ -21,7 +19,6 @@ const PROTECTED_PAGES = [
   { name: 'calendar', url: '/calendar' },
   { name: 'community', url: '/community' },
   { name: 'community-agreement', url: '/community-agreement' },
-  { name: 'zines', url: '/zines' },
   { name: 'archive', url: '/archive' },
 ];
 

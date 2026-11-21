@@ -52,6 +52,7 @@ public/              favicon, icon, manifest, robots, sitemap, published media
 | `/admin-login` | public | Organizer sign in |
 | `/admin` | admin | Moderation, events, products, archive uploads |
 | `/bulletin` | member | Categorized discussions, replies, and private reports |
+| `/bulletin/[id]` | member | Persistent individual discussion and replies |
 | `/community-agreement` | member/admin | Community agreement and role-only acceptance record |
 | `/calendar` | member | Events and RSVPs |
 | `/chat` | member | Encrypted member chat |
@@ -59,9 +60,9 @@ public/              favicon, icon, manifest, robots, sitemap, published media
 | `/community` | member | Shared gallery |
 | `/archive` | member | Protected archive collection plus uploaded archive |
 | `/shop` | member | Store items managed in the admin |
-| `/zines`, `/education`, `/organizing`, `/care` | member | Program pages |
+| `/shop`, `/care` | member | Community store, zines, and consolidated community care, organizing, and education |
 
-`/events` redirects to `/calendar`; `/shop/success` to `/donate`; legacy `*.html` URLs redirect to their App Router equivalents.
+`/events` redirects to `/calendar`; `/shop/success` to `/donate`; `/education` and `/organizing` redirect to `/care`; `/zines` redirects to `/shop`; legacy `*.html` URLs redirect to their App Router equivalents.
 
 ## Auth model
 
@@ -102,6 +103,27 @@ npm run test:responsive     # layout checks
 ```
 
 The Playwright config builds and starts the app automatically. CI uses a test-only signing secret and signed test cookies for protected routes; no production credentials are required.
+
+## Development sequence
+
+1. Understand the existing architecture — completed.
+2. Improve the Bulletin layout — completed.
+3. Add categories for existing discussions — completed.
+4. Add persistent individual thread pages — completed.
+5. Add pagination and search — planned after thread routes.
+6. Establish community agreements — completed.
+7. Build reporting and moderation workflows — initial implementation completed.
+8. Evaluate individual member accounts — defer until the community requires individual identity and permissions.
+9. Complete independent testing and deployment review — in progress.
+
+### Project constraints
+
+- Preserve accessible mobile layouts.
+- Preserve compatibility with existing Firestore posts and reply subcollections.
+- Keep the shared-member and organizer authentication model.
+- Do not add an external search dependency.
+- Do not create public member profiles.
+- Make surgical changes instead of replacing working systems.
 
 ## Deployment
 

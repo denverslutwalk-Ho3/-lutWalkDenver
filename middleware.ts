@@ -13,10 +13,7 @@ const AUTH_REQUIRED_PATHS = [
   '/chat',
   '/community',
   '/community-agreement',
-  '/education',
-  '/organizing',
   '/shop',
-  '/zines',
 ];
 
 const ADMIN_PATHS = ['/admin'];
@@ -76,9 +73,6 @@ export const config = {
     '/chat/:path*',
     '/community/:path*',
     '/community-agreement/:path*',
-    '/education/:path*',
-    '/organizing/:path*',
     '/shop/:path*',
-    '/zines/:path*',
   ],
 };

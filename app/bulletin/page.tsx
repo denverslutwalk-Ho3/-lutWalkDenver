@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import {
@@ -301,20 +302,15 @@ export default function BulletinPage() {
   };
 
   const copyThreadLink = async (threadId: string) => {
-    const url = `${window.location.origin}/bulletin#thread-${threadId}`;
+    const url = `${window.location.origin}/bulletin/${threadId}`;
     try {
       await navigator.clipboard.writeText(url);
       setReplyStatus((prev) => ({ ...prev, [threadId]: 'Thread link copied.' }));
     } catch {
-      window.history.replaceState(null, '', `#thread-${threadId}`);
+      window.history.replaceState(null, '', `/bulletin/${threadId}`);
       setReplyStatus((prev) => ({ ...prev, [threadId]: 'Link is in the address bar.' }));
     }
   };
-
-  useEffect(() => {
-    const threadId = window.location.hash.match(/^#thread-(.+)$/)?.[1];
-    if (threadId) void loadReplies(threadId);
-  }, [loadReplies]);
 
   const visiblePosts = posts.filter((post) => (
     categoryFilter === 'all'
@@ -500,7 +496,7 @@ export default function BulletinPage() {
               <header className="post__header">
                 <h3>
                   {post.pinned && <span className="pin-badge">Pinned</span>}
-                  {post.title}
+                  <Link href={`/bulletin/${post.id}`}>{post.title}</Link>
                 </h3>
                 <div className="post__meta">
                   <span className="category-badge">

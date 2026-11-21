@@ -5,8 +5,6 @@ import { useEffect, useState } from 'react';
 
 const NAV_ITEMS = [
   { href: '/about', label: 'About' },
-  { href: '/organizing', label: 'Organizing' },
-  { href: '/education', label: 'Education' },
   { href: '/care', label: 'Care' },
   { href: '/community', label: 'Gallery' },
   { href: '/bulletin', label: 'Bulletin' },
@@ -14,8 +12,7 @@ const NAV_ITEMS = [
   { href: '/calendar', label: 'Calendar' },
   { href: '/chat', label: 'Chat' },
   { href: '/ai-chat', label: 'AI Chat' },
-  { href: '/zines', label: 'Zines' },
-  { href: '/shop', label: 'Store' },
+  { href: '/shop', label: 'Store / Zines' },
   { href: '/donate', label: 'Donate' },
 ];
 

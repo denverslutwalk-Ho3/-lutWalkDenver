@@ -7,8 +7,8 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const PUBLIC_PAGES = ['/', '/about', '/login', '/donate', '/admin-login', '/privacy', '/terms', '/accessibility'];
 
 const PROTECTED_ROUTES = [
-  '/archive', '/bulletin', '/calendar', '/care', '/chat',
-  '/community', '/community-agreement', '/education', '/organizing', '/shop', '/zines',
+  '/archive', '/bulletin', '/bulletin/example-thread', '/calendar', '/care', '/chat',
+  '/community', '/community-agreement', '/shop',
 ];
 
 test.describe('Public pages load', () => {

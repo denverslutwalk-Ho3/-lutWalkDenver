@@ -28,6 +28,7 @@ type AdminEvent = {
   time: string;
   location: string;
   description: string;
+  archived?: boolean;
 };
 
 type Product = {
@@ -279,12 +280,28 @@ export default function AdminDashboardPage() {
   };
 
   const deleteEvent = async (id: string) => {
+    if (!window.confirm('Delete this event? This cannot be undone.')) return;
     const response = await fetch(`/api/events/${id}`, { method: 'DELETE', credentials: 'include' });
     if (!response.ok) {
       void loadData();
       return;
     }
     setEvents((prev) => prev.filter((e) => e.id !== id));
+  };
+
+  const archiveEvent = async (event: AdminEvent) => {
+    const archived = !event.archived;
+    const response = await fetch(`/api/events/${event.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ archived }),
+    });
+    if (!response.ok) {
+      void loadData();
+      return;
+    }
+    setEvents((prev) => prev.map((item) => item.id === event.id ? { ...item, archived } : item));
   };
 
   // ── Products ─────────────────────────────────────────────────────────────
@@ -694,6 +711,7 @@ export default function AdminDashboardPage() {
                   <div className="admin-list-meta">
                     <strong>{ev.title}</strong>
                     <span className="muted"> · {ev.date}</span>
+                    {ev.archived && <span className="pin-badge">Archived</span>}
                   </div>
                   <p className="admin-list-body">{ev.location}</p>
                   <div className="admin-list-actions">
@@ -704,6 +722,13 @@ export default function AdminDashboardPage() {
                       aria-label={`Edit ${ev.title}`}
                     >
                       Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => void archiveEvent(ev)}
+                    >
+                      {ev.archived ? 'Restore' : 'Archive'}
                     </button>
                     <button
                       type="button"

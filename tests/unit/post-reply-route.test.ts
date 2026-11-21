@@ -63,7 +63,10 @@ describe('POST /api/posts/[id]/replies', () => {
     });
     expect(transaction.update).toHaveBeenCalledWith(
       transaction.get.mock.calls[0]?.[0],
-      { replyCount: { increment: 1 } },
+      {
+        replyCount: { increment: 1 },
+        lastActivityAt: 'SERVER_TIMESTAMP',
+      },
     );
   });
 

@@ -2,19 +2,9 @@ import Link from 'next/link';
 
 const SECTIONS = [
   {
-    href: '/organizing',
-    title: 'Organizing',
-    copy: 'Announcements, volunteer coordination, and mutual aid.',
-  },
-  {
-    href: '/education',
-    title: 'Education',
-    copy: 'Zines, archive material, and shared history.',
-  },
-  {
     href: '/care',
-    title: 'Care',
-    copy: 'Support networks and ways to ask for or offer help.',
+    title: 'Care, organizing, and education',
+    copy: 'Get involved, learn together, and ask for or offer support.',
   },
   {
     href: '/calendar',

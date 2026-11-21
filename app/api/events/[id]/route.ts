@@ -30,11 +30,11 @@ export async function PATCH(
   const { id } = await params;
   try {
     const body = await request.json() as Record<string, unknown>;
-    const allowed = ['title', 'date', 'time', 'location', 'description'];
     const updates: Record<string, unknown> = {};
-    for (const key of allowed) {
+    for (const key of ['title', 'date', 'time', 'location', 'description']) {
       if (typeof body[key] === 'string') updates[key] = (body[key] as string).trim();
     }
+    if (typeof body.archived === 'boolean') updates.archived = body.archived;
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
     }

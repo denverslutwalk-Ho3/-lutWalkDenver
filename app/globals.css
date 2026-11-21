@@ -831,6 +831,17 @@ input[type="file"] {
   padding-left: 1.5rem;
 }
 
+.thread-breadcrumb {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.thread-page h1 {
+  font-size: clamp(1.6rem, 3vw, 2.5rem);
+  text-transform: none;
+}
+
 /* ── Calendar ──────────────────────────────────────────────────────────── */
 
 .cal-nav {
